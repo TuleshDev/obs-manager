@@ -10,6 +10,9 @@ class Student(Base):
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
+    city = Column(String(100), nullable=True)
+    address = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
 
     chapter = Column(Integer, nullable=False, default=0)
     paragraph = Column(Integer, nullable=False, default=0)
