@@ -1,4 +1,10 @@
 {
+  "db": {
+    "host": "localhost",
+    "port": 5432,
+    "user": "postgres",
+    "database": "obs_manager"
+  },
   "obs": {
     "path": "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
     "dir": "C:\\Program Files\\obs-studio\\bin\\64bit"
