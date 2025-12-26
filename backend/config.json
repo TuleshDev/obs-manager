@@ -1,0 +1,9 @@
+{
+  "ws_host": "localhost",
+  "ws_port": 4455,
+  "allow_delete_scenes": true,
+  "main_scene_name": "SafeScene",
+  "camera_source_name": "Webcam1",
+  "camera_input_kind": "dshow_input",
+  "camera_device_id": "default"
+}
