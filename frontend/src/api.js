@@ -23,4 +23,10 @@ export const api = {
   updateConfig: (cfg) => handleResponse(axios.put('/api/config', cfg)),
   listDevices: () => handleResponse(axios.get('/api/devices')),
   apply: () => handleResponse(axios.post('/api/apply')),
+
+  listStudents: () => handleResponse(axios.get('/api/students')),
+  getStudent: (id) => handleResponse(axios.get(`/api/students/${id}`)),
+  createStudent: (student) => handleResponse(axios.post('/api/students', student)),
+  updateStudent: (id, student) => handleResponse(axios.put(`/api/students/${id}`, student)),
+  deleteStudent: (id) => handleResponse(axios.delete(`/api/students/${id}`))
 }

@@ -8,6 +8,10 @@ from flask_cors import CORS
 
 from obs_actions import ObsActions
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import Base, Student
+
 app = Flask(__name__)
 CORS(app)
 
@@ -21,6 +25,16 @@ try:
 except Exception as e:
     traceback.print_exc()
     settings = {}
+
+db_password = os.getenv("DB_PASSWORD")
+
+DATABASE_URL = (
+    f"postgresql+psycopg2://{settings["db"]['user']}:{db_password}@"
+    f"{settings["db"]['host']}:{settings["db"]['port']}/{settings["db"]['database']}"
+)
+
+engine = create_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(bind=engine)
 
 def ensure_obs_running():
     for proc in psutil.process_iter(['name']):
@@ -128,6 +142,64 @@ def get_devices():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/api/students", methods=["GET"])
+def get_students():
+    db = SessionLocal()
+    students = db.query(Student).all()
+    db.close()
+    return jsonify([{
+        "id": s.id,
+        "first_name": s.first_name,
+        "last_name": s.last_name,
+        "email": s.email,
+        "city": s.city,
+        "address": s.address,
+        "phone": s.phone,
+        "chapter": s.chapter,
+        "paragraph": s.paragraph,
+        "section": s.section,
+        "position": s.position,
+        "task_number": s.task_number
+    } for s in students])
+
+@app.route("/api/students", methods=["POST"])
+def create_student():
+    data = request.get_json(force=True)
+    db = SessionLocal()
+    student = Student(**data)
+    db.add(student)
+    db.commit()
+    db.refresh(student)
+    db.close()
+    return jsonify({"id": student.id, "status": "created"})
+
+@app.route("/api/students/<int:student_id>", methods=["PUT"])
+def update_student(student_id):
+    data = request.get_json(force=True)
+    db = SessionLocal()
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        db.close()
+        return jsonify({"error": "Student not found"}), 404
+    for key, value in data.items():
+        setattr(student, key, value)
+    db.commit()
+    db.refresh(student)
+    db.close()
+    return jsonify({"id": student.id, "status": "updated"})
+
+@app.route("/api/students/<int:student_id>", methods=["DELETE"])
+def delete_student(student_id):
+    db = SessionLocal()
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        db.close()
+        return jsonify({"error": "Student not found"}), 404
+    db.delete(student)
+    db.commit()
+    db.close()
+    return jsonify({"id": student_id, "status": "deleted"})
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)
