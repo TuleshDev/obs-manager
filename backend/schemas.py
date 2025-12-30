@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import List, Optional
+
 
 class StudentBase(BaseModel):
     first_name: str
@@ -17,7 +18,7 @@ class StudentBase(BaseModel):
 
 
 class StudentCreate(StudentBase):
-    pass
+    scenario_ids: Optional[List[int]] = []
 
 
 class StudentUpdate(BaseModel):
@@ -34,8 +35,32 @@ class StudentUpdate(BaseModel):
     position: Optional[int] = None
     task_number: Optional[int] = None
 
+    scenario_ids: Optional[List[int]] = None
+
 
 class Student(StudentBase):
+    id: int
+    scenarios: List[Scenario] = []
+
+    class Config:
+        orm_mode = True
+
+
+class ScenarioBase(BaseModel):
+    name: str
+    description: str
+
+
+class ScenarioCreate(ScenarioBase):
+    pass
+
+
+class ScenarioUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class Scenario(ScenarioBase):
     id: int
 
     class Config:

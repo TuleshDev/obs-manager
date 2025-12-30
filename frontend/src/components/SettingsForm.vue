@@ -4,7 +4,6 @@
       <v-form @submit.prevent="save">
         <v-text-field v-model="local.ws_host" label="WS Host" />
         <v-text-field v-model="local.ws_port" label="WS Port" type="number" />
-        <v-text-field v-model="local.ws_password" label="WS Password" type="password" />
 
         <v-switch v-model="local.allow_delete_scenes" label="Разрешить удаление сцен" />
 
@@ -35,7 +34,6 @@ const emit = defineEmits(['updated', 'error'])
 const local = reactive({
   ws_host: '',
   ws_port: 4455,
-  ws_password: '',
   allow_delete_scenes: false,
   main_scene_name: 'MainScene',
   camera_source_name: 'MyCamera',

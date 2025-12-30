@@ -10,7 +10,8 @@ from obs_actions import ObsActions
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Base, Student
+from models import Base, Student, Scenario
+from models import student_scenario
 
 app = Flask(__name__)
 CORS(app)
@@ -200,6 +201,101 @@ def delete_student(student_id):
     db.commit()
     db.close()
     return jsonify({"id": student_id, "status": "deleted"})
+
+@app.route("/api/scenarios", methods=["GET"])
+def get_scenarios():
+    db = SessionLocal()
+    scenarios = db.query(Scenario).all()
+    db.close()
+    return jsonify([{
+        "id": s.id,
+        "name": s.name,
+        "description": s.description
+    } for s in scenarios])
+
+@app.route("/api/scenarios/<int:scenario_id>", methods=["GET"])
+def get_scenario(scenario_id):
+    db = SessionLocal()
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    db.close()
+    if not scenario:
+        return jsonify({"error": "Scenario not found"}), 404
+
+    scenario_path = os.path.join("backend", "scenarios", scenario.name)
+    if not os.path.exists(scenario_path):
+        return jsonify({"error": "Сценарий не реализован"}), 400
+
+    return jsonify({
+        "id": scenario.id,
+        "name": scenario.name,
+        "description": scenario.description
+    })
+
+@app.route("/api/scenarios", methods=["POST"])
+def create_scenario():
+    data = request.get_json(force=True)
+    db = SessionLocal()
+    scenario = Scenario(**data)
+    db.add(scenario)
+    db.commit()
+    db.refresh(scenario)
+    db.close()
+    return jsonify({"id": scenario.id, "status": "created"})
+
+@app.route("/api/scenarios/<int:scenario_id>", methods=["PUT"])
+def update_scenario(scenario_id):
+    data = request.get_json(force=True)
+    db = SessionLocal()
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        db.close()
+        return jsonify({"error": "Scenario not found"}), 404
+    for key, value in data.items():
+        setattr(scenario, key, value)
+    db.commit()
+    db.refresh(scenario)
+    db.close()
+    return jsonify({"id": scenario.id, "status": "updated"})
+
+@app.route("/api/scenarios/<int:scenario_id>", methods=["DELETE"])
+def delete_scenario(scenario_id):
+    db = SessionLocal()
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        db.close()
+        return jsonify({"error": "Scenario not found"}), 404
+
+    scenario_path = os.path.join("backend", "scenarios", scenario.name)
+    if os.path.exists(scenario_path):
+        db.close()
+        return jsonify({"error": "Нельзя удалить сценарий: существует папка с реализацией"}), 400
+
+    db.delete(scenario)
+    db.commit()
+    db.close()
+    return jsonify({"id": scenario_id, "status": "deleted"})
+
+@app.route("/api/students/<int:student_id>/scenarios/<int:scenario_id>", methods=["POST"])
+def assign_scenario(student_id, scenario_id):
+    db = SessionLocal()
+    student = db.query(Student).filter(Student.id == student_id).first()
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+
+    if not student or not scenario:
+        db.close()
+        return jsonify({"error": "Student or Scenario not found"}), 404
+
+    if scenario not in student.scenarios:
+        student.scenarios.append(scenario)
+        db.commit()
+        db.refresh(student)
+
+    db.close()
+    return jsonify({
+        "status": "ok",
+        "student_id": student_id,
+        "scenario_id": scenario_id
+    })
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)

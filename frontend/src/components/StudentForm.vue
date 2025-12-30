@@ -1,7 +1,7 @@
 <template>
   <v-card>
     <v-card-title>
-      {{ form.id ? 'Редактирование клиента' : 'Создание клиента' }}
+      {{ form.id ? 'Редактирование студента' : 'Создание студента' }}
     </v-card-title>
     <v-card-text>
       <v-form @submit.prevent="onSubmit">

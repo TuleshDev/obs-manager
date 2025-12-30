@@ -28,5 +28,13 @@ export const api = {
   getStudent: (id) => handleResponse(axios.get(`/api/students/${id}`)),
   createStudent: (student) => handleResponse(axios.post('/api/students', student)),
   updateStudent: (id, student) => handleResponse(axios.put(`/api/students/${id}`, student)),
-  deleteStudent: (id) => handleResponse(axios.delete(`/api/students/${id}`))
+  deleteStudent: (id) => handleResponse(axios.delete(`/api/students/${id}`)),
+
+  listScenarios: () => handleResponse(axios.get('/api/scenarios')),
+  getScenario: (id) => handleResponse(axios.get(`/api/scenarios/${id}`)),
+  createScenario: (scenario) => handleResponse(axios.post('/api/scenarios', scenario)),
+  updateScenario: (id, scenario) => handleResponse(axios.put(`/api/scenarios/${id}`, scenario)),
+  deleteScenario: (id) => handleResponse(axios.delete(`/api/scenarios/${id}`)),
+  assignScenario: (studentId, scenarioId) =>
+    handleResponse(axios.post(`/api/students/${studentId}/scenarios/${scenarioId}`))
 }

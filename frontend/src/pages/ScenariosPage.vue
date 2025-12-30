@@ -1,6 +1,6 @@
 <template>
   <v-container>
-    <h2>Список студентов</h2>
+    <h2>Список сценариев</h2>
 
     <v-row class="mb-4">
       <v-col cols="12" sm="6">
@@ -11,15 +11,15 @@
         />
       </v-col>
       <v-col cols="12" sm="6" class="text-right">
-        <v-btn color="green" @click="addStudent">
-          Добавить студента
+        <v-btn color="green" @click="addScenario">
+          Добавить сценарий
         </v-btn>
       </v-col>
     </v-row>
 
     <v-data-table
       :headers="headers"
-      :items="students"
+      :items="scenarios"
       :search="search"
       :items-per-page="5"
       item-key="id"
@@ -29,14 +29,14 @@
         <v-btn
           color="blue"
           variant="text"
-          @click="editStudent(item)"
+          @click="editScenario(item)"
         >
           Редактировать
         </v-btn>
         <v-btn
           color="red"
           variant="text"
-          @click="deleteStudent(item.id)"
+          @click="deleteScenario(item.id)"
         >
           Удалить
         </v-btn>
@@ -57,10 +57,10 @@
 
         <v-card>
           <v-card-text>
-            <StudentForm
-              v-if="selectedStudent"
-              :model-value="selectedStudent"
-              @save="saveStudent"
+            <ScenarioForm
+              v-if="selectedScenario"
+              :model-value="selectedScenario"
+              @save="saveScenario"
             />
           </v-card-text>
         </v-card>
@@ -72,83 +72,70 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../api'
-import StudentForm from '../components/StudentForm.vue'
+import ScenarioForm from '../components/ScenarioForm.vue'
 import { useSnackbar } from '../composables/useSnackbar'
 
-const students = ref([])
+const scenarios = ref([])
 const dialog = ref(false)
-const selectedStudent = ref(null)
+const selectedScenario = ref(null)
 const search = ref('')
 
 const { showMessage } = useSnackbar()
 
 const headers = [
   { title: 'ID', key: 'id', sortable: true },
-  { title: 'Имя', key: 'first_name', sortable: true },
-  { title: 'Фамилия', key: 'last_name', sortable: true },
-  { title: 'Email', key: 'email', sortable: true },
-  { title: 'Город', key: 'city', sortable: true },
-  { title: 'Адрес', key: 'address', sortable: false },
-  { title: 'Телефон', key: 'phone', sortable: false },
+  { title: 'Название', key: 'name', sortable: true },
+  { title: 'Описание', key: 'description', sortable: false },
   { title: 'Действия', key: 'actions', sortable: false }
 ]
 
-const loadStudents = async () => {
+const loadScenarios = async () => {
   try {
-    students.value = await api.listStudents()
+    scenarios.value = await api.listScenarios()
   } catch (err) {
     showMessage('Ошибка загрузки: ' + err.message, 'error')
   }
 }
 
-const addStudent = () => {
-  selectedStudent.value = {
-    first_name: '',
-    last_name: '',
-    email: '',
-    city: '',
-    address: '',
-    phone: '',
-    chapter: 0,
-    paragraph: 0,
-    section: 0,
-    position: 0,
-    task_number: 0
+const addScenario = () => {
+  selectedScenario.value = {
+    name: '',
+    description: ''
   }
   dialog.value = true
 }
 
-const editStudent = (student) => {
-  selectedStudent.value = { ...student }
+const editScenario = (scenario) => {
+  selectedScenario.value = { ...scenario }
   dialog.value = true
 }
 
-const saveStudent = async (data) => {
+const saveScenario = async (data) => {
   try {
     if (data.id) {
-      await api.updateStudent(data.id, data)
-      showMessage('Студент обновлён!')
+      await api.updateScenario(data.id, data)
+      showMessage('Сценарий обновлён!')
     } else {
-      await api.createStudent(data)
-      showMessage('Студент добавлен!')
+      await api.createScenario(data)
+      showMessage('Сценарий добавлен!')
     }
     dialog.value = false
-    loadStudents()
+    loadScenarios()
   } catch (err) {
     showMessage('Ошибка сохранения: ' + err.message, 'error')
   }
 }
 
-const deleteStudent = async (id) => {
-  if (!confirm('Удалить студента?')) return
+const deleteScenario = async (id) => {
+  if (!confirm('Удалить сценарий?')) return
   try {
-    await api.deleteStudent(id)
-    showMessage('Студент удалён!')
-    loadStudents()
+    await api.deleteScenario(id)
+    showMessage('Сценарий удалён!')
+    loadScenarios()
   } catch (err) {
     showMessage('Ошибка удаления: ' + err.message, 'error')
   }
 }
 
-onMounted(loadStudents)
+onMounted(loadScenarios)
 </script>
