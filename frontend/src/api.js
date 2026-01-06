@@ -19,10 +19,22 @@ function handleResponse(promise) {
 }
 
 export const api = {
-  getConfig: () => handleResponse(axios.get('/api/config')),
-  updateConfig: (cfg) => handleResponse(axios.put('/api/config', cfg)),
+  getConfig: (scenarioName = null) => {
+    const url = scenarioName
+      ? `/api/config?scenario=${encodeURIComponent(scenarioName)}`
+      : '/api/config'
+    return handleResponse(axios.get(url))
+  },
+  updateConfig: (cfg) => {
+    return handleResponse(axios.put('/api/config', cfg))
+  },
+  restoreBackup: (scenarioName) => {
+    return handleResponse(axios.post(`/api/backup/restore/${scenarioName}`))
+  },
   listDevices: () => handleResponse(axios.get('/api/devices')),
-  apply: () => handleResponse(axios.post('/api/apply')),
+  apply: (cfg) => {
+    return handleResponse(axios.post('/api/apply', cfg))
+  },
 
   listStudents: () => handleResponse(axios.get('/api/students')),
   getStudent: (id) => handleResponse(axios.get(`/api/students/${id}`)),

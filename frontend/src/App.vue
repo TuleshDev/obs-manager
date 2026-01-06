@@ -10,8 +10,8 @@
         <v-list-item to="/currentscenario">
           {{ scenarioStore.id ? 'Текущий сценарий: ' + scenarioStore.name : 'Сценарий' }}
         </v-list-item>
-        <v-list-item to="/scenarios" title="Все сценарии" />
         <v-list-item to="/settings" title="Настройки" />
+        <v-list-item to="/scenarios" title="Все сценарии" />
       </v-list>
     </v-navigation-drawer>
 

@@ -51,33 +51,60 @@ def ensure_obs_running():
 
     return False
 
-try:
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        config = json.load(f)
-except Exception as e:
-    traceback.print_exc()
-    config = {}
+def get_global_config():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        cfg = {}
 
-ensure_obs_running()
+    return cfg
 
-try:
-    ws_password = os.getenv("WS_PASSWORD")
-
-    obs = ObsActions(
-        host=config.get("ws_host", "127.0.0.1"),
-        port=config.get("ws_port", 4455),
-        password=ws_password
-    )
-except Exception as e:
-    traceback.print_exc()
-    obs = None
-
-def write_config(cfg):
+def write_global_config(cfg):
     try:
         with open(CONFIG_PATH, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
     except Exception as e:
         traceback.print_exc()
+
+def get_scenario_config(scenario_name):
+    cfg = {}
+
+    scenario_path = os.path.join(BASE_DIR, "scenarios", scenario_name, "config.json")
+    if os.path.exists(scenario_path):
+        try:
+            with open(scenario_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+
+    return cfg
+
+def write_scenario_config(scenario_name, cfg, backup_filename=None):
+    try:
+        filename = backup_filename if backup_filename else "config.json"
+        scenario_path = os.path.join(BASE_DIR, "scenarios", scenario_name, filename)
+
+        with open(scenario_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        traceback.print_exc()
+
+ensure_obs_running()
+
+global_cfg = get_global_config()
+
+try:
+    ws_password = os.getenv("WS_PASSWORD")
+
+    obs = ObsActions(
+        host=global_cfg.get("ws_host", "127.0.0.1"),
+        port=global_cfg.get("ws_port", 4455),
+        password=ws_password
+    )
+except Exception as e:
+    traceback.print_exc()
+    obs = None
 
 @app.before_request
 def check_obs():
@@ -85,42 +112,57 @@ def check_obs():
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
-    return jsonify(config)
+    global_cfg = get_global_config()
+
+    scenario_cfg = {}
+    scenario_name = request.args.get("scenario")
+    if scenario_name:
+        scenario_cfg = get_scenario_config(scenario_name)
+
+    return jsonify({
+        "global": global_cfg,
+        "scenario": scenario_cfg
+    })
 
 @app.route("/api/config", methods=["PUT"])
 def update_config():
-    data = request.get_json(force=True)
-    write_config(data)
+    data = request.get_json(force=True) or {}
+    global_cfg = data.get("global", {})
+    scenario_cfg = data.get("scenario", {})
+    scenario_name = data.get("scenario_name")
+    backup_filename = data.get("backup_filename")
+
+    if global_cfg:
+        write_global_config(global_cfg)
+    if scenario_name and scenario_cfg:
+        write_scenario_config(scenario_name, scenario_cfg, backup_filename)
+
     return jsonify({"ok": True})
 
-@app.route("/api/apply", methods=["POST"])
-def apply_actions():
-    if obs is None:
-        return jsonify({"status": "error", "message": "OBS клиент не инициализирован"}), 500
+@app.route("/api/backup/restore/<scenario>", methods=["POST"])
+def restore_backup(scenario):
     try:
-        if config.get("allow_delete_scenes", True):
-            obs.clear_scenes()
+        scenario_dir = os.path.join(BASE_DIR, "scenarios", scenario)
+        if not os.path.isdir(scenario_dir):
+            return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
 
-        main_scene = config.get("main_scene_name", "SafeScene")
-        obs.create_main_scene(main_scene)
+        files = [f for f in os.listdir(scenario_dir) if f.startswith("backup_") and f.endswith(".json")]
+        if not files:
+            return jsonify({"status": "error", "message": "Нет ни одного файла бэкапа"}), 404
 
-        obs.add_camera(
-            scene_name=main_scene,
-            input_name=config.get("camera_source_name", "Webcam1"),
-            input_kind=config.get("camera_input_kind", "dshow_input"),
-            device_id=config.get("camera_device_id", "default")
-        )
+        files.sort()
+        latest_backup = files[-1]
 
-        obs.add_microphone(
-            scene_name=main_scene,
-            input_name=config.get("mic_source_name", "Mic1"),
-            input_kind=config.get("mic_input_kind", "wasapi_input_capture"),
-            device_id=config.get("mic_device_id", "default")
-        )
+        backup_path = os.path.join(scenario_dir, latest_backup)
+        config_path = os.path.join(scenario_dir, "config.json")
 
-        return jsonify({"status": "ok", "message": "Сцены и источники обновлены"})
-    except RuntimeError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        with open(backup_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"status": "ok", "message": f"Файл config.json переписан из {latest_backup}"})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -140,6 +182,43 @@ def get_devices():
             elif "wasapi" in kind or "pulse" in kind or "coreaudio" in kind:
                 microphones.append({"name": name, "kind": kind})
         return jsonify({"status": "ok", "cameras": cameras, "microphones": microphones})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/api/apply", methods=["POST"])
+def apply_actions():
+    if obs is None:
+        return jsonify({"status": "error", "message": "OBS клиент не инициализирован"}), 500
+    try:
+        data = request.get_json(force=True) or {}
+        global_cfg = data.get("global", {})
+        scenario_cfg = data.get("scenario", {})
+        scenario_name = data.get("scenario_name")
+
+        if global_cfg.get("allow_delete_scenes", True):
+            obs.clear_scenes()
+
+        main_scene = global_cfg.get("main_scene_name", "SafeScene")
+        obs.create_main_scene(main_scene)
+
+        obs.add_camera(
+            scene_name=main_scene,
+            input_name=scenario_cfg.get("camera_source_name", "Webcam1"),
+            input_kind=scenario_cfg.get("camera_input_kind", "dshow_input"),
+            device_id=scenario_cfg.get("camera_device_id", "default")
+        )
+
+        obs.add_microphone(
+            scene_name=main_scene,
+            input_name=scenario_cfg.get("mic_source_name", "Mic1"),
+            input_kind=scenario_cfg.get("mic_input_kind", "wasapi_input_capture"),
+            device_id=scenario_cfg.get("mic_device_id", "default")
+        )
+
+        return jsonify({"status": "ok", "message": "Сцены и источники обновлены"})
+    except RuntimeError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
     except Exception as e:
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -221,7 +300,7 @@ def get_scenario(scenario_id):
     if not scenario:
         return jsonify({"error": "Scenario not found"}), 404
 
-    scenario_path = os.path.join("backend", "scenarios", scenario.name)
+    scenario_path = os.path.join(BASE_DIR, "scenarios", scenario.name)
     if not os.path.exists(scenario_path):
         return jsonify({"error": "Сценарий не реализован"}), 400
 
@@ -265,7 +344,7 @@ def delete_scenario(scenario_id):
         db.close()
         return jsonify({"error": "Scenario not found"}), 404
 
-    scenario_path = os.path.join("backend", "scenarios", scenario.name)
+    scenario_path = os.path.join(BASE_DIR, "scenarios", scenario.name)
     if os.path.exists(scenario_path):
         db.close()
         return jsonify({"error": "Нельзя удалить сценарий: существует папка с реализацией"}), 400

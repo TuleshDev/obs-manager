@@ -9,6 +9,7 @@
           v-model="form.name"
           label="Название сценария"
           required
+          :disabled="!!form.id"
         />
         <v-textarea
           v-model="form.description"
