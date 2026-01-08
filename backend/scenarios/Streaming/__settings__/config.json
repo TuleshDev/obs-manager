@@ -1,0 +1,15 @@
+{
+  "allow_delete_scenes": false,
+  "camera": {
+    "device_id": "stub",
+    "is_stub": true,
+    "kind": "stub",
+    "name": "Нет камеры"
+  },
+  "microphone": {
+    "device_id": "stub",
+    "is_stub": true,
+    "kind": "stub",
+    "name": "Нет микрофона"
+  }
+}

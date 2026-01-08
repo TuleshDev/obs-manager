@@ -13,29 +13,56 @@ from sqlalchemy.orm import sessionmaker
 from models import Base, Student, Scenario
 from models import student_scenario
 
+from libs.hints import load_hints, guess_platform, guess_source, guess_manufacturer, is_mobile_camera
+
 app = Flask(__name__)
 CORS(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
-CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+SETTINGS_PATH = os.path.join(BASE_DIR, "__settings__", "settings.json")
+CONFIG_PATH = os.path.join(BASE_DIR, "__settings__", "config.json")
+HINTS_PATH = os.path.join(BASE_DIR, "__settings__", "hints.json")
 
-try:
-    with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-        settings = json.load(f)
-except Exception as e:
-    traceback.print_exc()
-    settings = {}
+def get_global_config(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except Exception:
+        traceback.print_exc()
+        cfg = {}
 
-db_password = os.getenv("DB_PASSWORD")
+    return cfg
 
-DATABASE_URL = (
-    f"postgresql+psycopg2://{settings["db"]['user']}:{db_password}@"
-    f"{settings["db"]['host']}:{settings["db"]['port']}/{settings["db"]['database']}"
-)
+def write_global_config(path, cfg):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        traceback.print_exc()
 
-engine = create_engine(DATABASE_URL, echo=True)
-SessionLocal = sessionmaker(bind=engine)
+def get_scenario_config(path, scenario_name):
+    cfg = {}
+
+    scenario_path = os.path.join(path, "scenarios", scenario_name, "__settings__", "config.json")
+    if os.path.exists(scenario_path):
+        try:
+            with open(scenario_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            traceback.print_exc()
+            cfg = {}
+
+    return cfg
+
+def write_scenario_config(path, scenario_name, cfg, backup_filename=None):
+    try:
+        filename = backup_filename if backup_filename else "config.json"
+        scenario_path = os.path.join(path, "scenarios", scenario_name, "__settings__", filename)
+
+        with open(scenario_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        traceback.print_exc()
 
 def ensure_obs_running():
     for proc in psutil.process_iter(['name']):
@@ -51,48 +78,21 @@ def ensure_obs_running():
 
     return False
 
-def get_global_config():
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    except Exception:
-        cfg = {}
+settings = get_global_config(SETTINGS_PATH)
+db_password = os.getenv("DB_PASSWORD")
 
-    return cfg
+DATABASE_URL = (
+    f"postgresql+psycopg2://{settings["db"]['user']}:{db_password}@"
+    f"{settings["db"]['host']}:{settings["db"]['port']}/{settings["db"]['database']}"
+)
 
-def write_global_config(cfg):
-    try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        traceback.print_exc()
-
-def get_scenario_config(scenario_name):
-    cfg = {}
-
-    scenario_path = os.path.join(BASE_DIR, "scenarios", scenario_name, "config.json")
-    if os.path.exists(scenario_path):
-        try:
-            with open(scenario_path, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            cfg = {}
-
-    return cfg
-
-def write_scenario_config(scenario_name, cfg, backup_filename=None):
-    try:
-        filename = backup_filename if backup_filename else "config.json"
-        scenario_path = os.path.join(BASE_DIR, "scenarios", scenario_name, filename)
-
-        with open(scenario_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        traceback.print_exc()
+engine = create_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(bind=engine)
 
 ensure_obs_running()
 
-global_cfg = get_global_config()
+global_cfg = get_global_config(CONFIG_PATH)
+load_hints(HINTS_PATH)
 
 try:
     ws_password = os.getenv("WS_PASSWORD")
@@ -106,18 +106,44 @@ except Exception as e:
     traceback.print_exc()
     obs = None
 
+def make_stub(name="Нет устройства", kind="stub"):
+    return {
+        "device_id": "stub",
+        "name": name,
+        "kind": kind,
+        "is_stub": True
+    }
+
 @app.before_request
 def check_obs():
     ensure_obs_running()
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
-    global_cfg = get_global_config()
+    global_cfg = get_global_config(CONFIG_PATH)
 
     scenario_cfg = {}
     scenario_name = request.args.get("scenario")
-    if scenario_name:
-        scenario_cfg = get_scenario_config(scenario_name)
+
+    if scenario_name == "Streaming":
+        scenario_cfg = get_scenario_config(BASE_DIR, scenario_name) or {}
+
+        if "camera" not in scenario_cfg or not scenario_cfg["camera"]:
+            scenario_cfg["camera"] = make_stub("Нет камеры")
+
+        if "microphone" not in scenario_cfg or not scenario_cfg["microphone"]:
+            scenario_cfg["microphone"] = make_stub("Нет микрофона")
+
+    elif scenario_name == "Math":
+        scenario_cfg = get_scenario_config(BASE_DIR, scenario_name) or {}
+
+        if "cameras" not in scenario_cfg or not scenario_cfg["cameras"]:
+            scenario_cfg["cameras"] = [make_stub("Нет камеры"), make_stub("Нет камеры")]
+        elif len(scenario_cfg["cameras"]) == 1:
+            scenario_cfg["cameras"].append(make_stub("Нет камеры"))
+
+        if "microphone" not in scenario_cfg or not scenario_cfg["microphone"]:
+            scenario_cfg["microphone"] = make_stub("Нет микрофона")
 
     return jsonify({
         "global": global_cfg,
@@ -133,9 +159,9 @@ def update_config():
     backup_filename = data.get("backup_filename")
 
     if global_cfg:
-        write_global_config(global_cfg)
+        write_global_config(CONFIG_PATH, global_cfg)
     if scenario_name and scenario_cfg:
-        write_scenario_config(scenario_name, scenario_cfg, backup_filename)
+        write_scenario_config(BASE_DIR, scenario_name, scenario_cfg, backup_filename)
 
     return jsonify({"ok": True})
 
@@ -154,13 +180,10 @@ def restore_backup(scenario):
         latest_backup = files[-1]
 
         backup_path = os.path.join(scenario_dir, latest_backup)
+        data = get_global_config(backup_path)
+
         config_path = os.path.join(scenario_dir, "config.json")
-
-        with open(backup_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        write_global_config(config_path, data)
 
         return jsonify({"status": "ok", "message": f"Файл config.json переписан из {latest_backup}"})
     except Exception as e:
@@ -174,14 +197,45 @@ def get_devices():
     try:
         inputs = obs.ws.get_input_list().inputs
         cameras, microphones = [], []
+
         for inp in inputs:
-            kind = inp["inputKind"]
-            name = inp["inputName"]
+            kind = inp.get("inputKind", "")
+            name = inp.get("inputName", "")
+            settings = inp.get("inputSettings", {}) or {}
+            device_id = settings.get("device_id") or settings.get("device", "") or "unknown"
+
+            platform = guess_platform(kind)
+            source = guess_source(name, device_id)
+
             if "dshow" in kind or "v4l2" in kind or "av_capture" in kind:
-                cameras.append({"name": name, "kind": kind})
+                mobile, hints = is_mobile_camera(kind, name, device_id)
+                manufacturer = guess_manufacturer(name, device_id)
+
+                cameras.append({
+                    "name": name,
+                    "kind": kind,
+                    "device_id": device_id,
+                    "platform": platform,          # windows/linux/apple/unknown
+                    "source": source,              # usb/network/virtual_driver/unknown
+                    "is_mobile": mobile,           # True/False
+                    "manufacturer": manufacturer,  # for example "Apple", "Samsung", or null
+                    "hints": hints                 # list of successful heuristics for transparency
+                })
+
             elif "wasapi" in kind or "pulse" in kind or "coreaudio" in kind:
-                microphones.append({"name": name, "kind": kind})
-        return jsonify({"status": "ok", "cameras": cameras, "microphones": microphones})
+                microphones.append({
+                    "name": name,
+                    "kind": kind,
+                    "device_id": device_id,
+                    "platform": platform,
+                    "source": source
+                })
+
+        return jsonify({
+            "status": "ok",
+            "cameras": cameras,
+            "microphones": microphones
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500

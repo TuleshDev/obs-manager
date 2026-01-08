@@ -10,6 +10,8 @@
         <component
           :is="scenarioComponent"
           v-model="local.scenario"
+          :cameras="cameras"
+          :microphones="microphones"
         />
 
         <v-btn type="submit" color="primary" class="mt-4">Сохранить</v-btn>
@@ -28,9 +30,12 @@ import SettingsStreaming from '../scenarios/Streaming/components/Settings.vue'
 
 const props = defineProps({
   globalConfig: { type: Object, default: () => ({}) },
-  scenarioConfig: { type: Object, default: () => ({}) }
+  scenarioConfig: { type: Object, default: () => ({}) },
+  cameras: { type: Array, default: () => [] },
+  microphones: { type: Array, default: () => [] }
 })
-const emit = defineEmits(['updated', 'error'])
+
+const emit = defineEmits(['updated', 'error', 'changed', 'saved'])
 
 const scenarioStore = useCurrentScenarioStore()
 
@@ -40,25 +45,43 @@ const local = reactive({
     ws_port: 4455
   },
   scenario: {
-    allow_delete_scenes: false,
-    main_scene_name: 'MainScene',
-    camera_source_name: 'MyCamera',
-    camera_input_kind: 'dshow_input',
-    camera_device_id: 'default'
+    allow_delete_scenes: false
   }
+})
+
+const original = reactive({
+  global: {},
+  scenario: {}
 })
 
 watch(
   () => props.globalConfig,
-  (cfg) => Object.assign(local.global, cfg || {}),
+  (cfg) => {
+    Object.assign(local.global, cfg || {})
+    Object.assign(original.global, cfg || {})
+    emit('saved')
+  },
   { immediate: true }
 )
 
 watch(
   () => props.scenarioConfig,
-  (cfg) => Object.assign(local.scenario, cfg || {}),
+  (cfg) => {
+    Object.assign(local.scenario, cfg || {})
+    Object.assign(original.scenario, cfg || {})
+    emit('saved')
+  },
   { immediate: true }
 )
+
+watch(local, () => {
+  const changed =
+    JSON.stringify(local.global) !== JSON.stringify(original.global) ||
+    JSON.stringify(local.scenario) !== JSON.stringify(original.scenario)
+
+  if (changed) emit('changed')
+  else emit('saved')
+}, { deep: true })
 
 const scenarioComponent = computed(() => {
   switch (scenarioStore.name) {
@@ -78,7 +101,10 @@ const save = async () => {
       scenario_name: scenarioStore.name,
       scenario: toRaw(local.scenario)
     })
+    Object.assign(original.global, toRaw(local.global))
+    Object.assign(original.scenario, toRaw(local.scenario))
     emit('updated')
+    emit('saved')
   } catch (err) {
     emit('error', 'Ошибка: ' + err.message)
   }

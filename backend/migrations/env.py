@@ -7,7 +7,7 @@ from alembic import context
 
 from models import Base
 
-with open("settings.json") as f:
+with open(os.path.join("__settings__", "settings.json")) as f:
     settings = json.load(f)["db"]
 
 db_password = os.getenv("DB_PASSWORD")

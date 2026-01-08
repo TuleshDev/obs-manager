@@ -14,16 +14,10 @@
           Настройки
         </v-tab>
         <v-tab
-          value="devices"
-          class="rounded-0 mx-2"
-          color="primary"
-        >
-          Доступные устройства
-        </v-tab>
-        <v-tab
           value="actions"
           class="rounded-0 mx-2"
           color="primary"
+          :disabled="formDirty"
         >
           Действия
         </v-tab>
@@ -34,17 +28,12 @@
           <SettingsForm
             @updated="loadConfig"
             @error="emitMessage($event, 'error')"
+            @changed="formDirty = true"
+            @saved="formDirty = false"
             :global-config="config.global"
             :scenario-config="config.scenario"
-          />
-        </v-tabs-window-item>
-
-        <v-tabs-window-item value="devices">
-          <component
-            :is="scenarioDeviceList"
             :cameras="cameras"
             :microphones="microphones"
-            @refresh="refreshDevices"
           />
         </v-tabs-window-item>
 
@@ -73,15 +62,14 @@ import { useCurrentScenarioStore } from '../stores/currentScenario'
 import ActionsPanelMath from '../scenarios/Math/components/ActionsPanel.vue'
 import ActionsPanelStreaming from '../scenarios/Streaming/components/ActionsPanel.vue'
 
-import DeviceListMath from '../scenarios/Math/components/DeviceList.vue'
-import DeviceListStreaming from '../scenarios/Streaming/components/DeviceList.vue'
-
 const tab = ref('config')
 const scenarioStore = useCurrentScenarioStore()
 
 const config = ref({ global: {}, scenario: {} })
 const cameras = ref([])
 const microphones = ref([])
+
+const formDirty = ref(false)
 
 const scenarioActionsPanel = computed(() => {
   switch (scenarioStore.name) {
@@ -91,17 +79,6 @@ const scenarioActionsPanel = computed(() => {
       return ActionsPanelStreaming
     default:
       return ActionsPanelMath
-  }
-})
-
-const scenarioDeviceList = computed(() => {
-  switch (scenarioStore.name) {
-    case 'Math':
-      return DeviceListMath
-    case 'Streaming':
-      return DeviceListStreaming
-    default:
-      return DeviceListMath
   }
 })
 

@@ -1,7 +1,0 @@
-{
-  "allow_delete_scenes": true,
-  "camera_device_id": "default",
-  "camera_input_kind": "dshow_input",
-  "camera_source_name": "Webcam1",
-  "main_scene_name": "SafeScene"
-}
