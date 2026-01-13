@@ -40,8 +40,9 @@
         <v-tabs-window-item value="actions">
           <component
             :is="scenarioActionsPanel"
-            @apply="apply"
+            @exportTo="exportTo"
             @downloadBackup="downloadBackup"
+            @importFrom="importFrom"
           />
         </v-tabs-window-item>
       </v-tabs-window>
@@ -101,17 +102,32 @@ const refreshDevices = async () => {
   }
 }
 
-const apply = async () => {
+const exportTo = async ({ useTemplate }) => {
   try {
-    const backupFilename = `backup_${new Date().toISOString().replace(/[:.]/g, "-")}.json`
+    const backupDir = `backup_${new Date().toISOString().replace(/[:.]/g, "-")}`
     await api.updateConfig({
       global: config.value.global,
       scenario_name: scenarioStore.name,
       scenario: config.value.scenario,
-      backup_filename: backupFilename
+      backup_dir: backupDir
     })
 
-    const res = await api.apply({
+    const res = await api.exportTo({
+      global: config.value.global,
+      scenario_name: scenarioStore.name,
+      scenario: config.value.scenario,
+      use_template: useTemplate
+    })
+
+    emitMessage("Успех: " + res.message, "success")
+  } catch (err) {
+    emitMessage("Ошибка: " + err.message, "error")
+  }
+}
+
+const importFrom = async () => {
+  try {
+    const res = await api.importFrom({
       global: config.value.global,
       scenario_name: scenarioStore.name,
       scenario: config.value.scenario

@@ -21,6 +21,8 @@
 </template>
 
 <script setup>
+import isEqual from 'lodash/isEqual'
+import omit from 'lodash/omit'
 import { reactive, watch, toRaw, computed } from 'vue'
 import { api } from '../api'
 import { useCurrentScenarioStore } from '../stores/currentScenario'
@@ -75,9 +77,12 @@ watch(
 )
 
 watch(local, () => {
+  const localScenario = omit(local.scenario, ['camera_settings'])
+  const originalScenario = omit(original.scenario, ['camera_settings'])
+
   const changed =
-    JSON.stringify(local.global) !== JSON.stringify(original.global) ||
-    JSON.stringify(local.scenario) !== JSON.stringify(original.scenario)
+    !isEqual(local.global, original.global) ||
+    !isEqual(localScenario, originalScenario)
 
   if (changed) emit('changed')
   else emit('saved')

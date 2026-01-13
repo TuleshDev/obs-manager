@@ -177,6 +177,16 @@ onMounted(() => {
     model.value.microphone = makeStubMicrophone()
   }
 
+  if (!model.value.camera_settings) {
+    model.value.camera_settings = [
+      {},
+      {
+        boundsWidth: 320,
+        boundsHeight: 240
+      }
+    ]
+  }
+
   refreshDevices()
 })
 </script>

@@ -1,0 +1,82 @@
+{
+  "profile": {
+    "name": "Math",
+    "settings": {
+      "video": {
+        "base_width": 1920,
+        "base_height": 1080,
+        "output_width": 1280,
+        "output_height": 720,
+        "fps": 30
+      },
+      "audio": {
+        "sample_rate": 44100,
+        "channels": 2
+      }
+    }
+  },
+  "scenes": [
+    {
+      "name": "MathScene",
+      "items": [
+        {
+          "sourceName": "DefaultCamera1",
+          "inputKind": "dshow_input",
+          "inputSettings": {
+            "device_id": "default"
+          },
+          "transform": {
+            "positionX": 0,
+            "positionY": 0,
+            "rotation": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "alignment": 5,
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsAlignment": 0,
+            "boundsWidth": "${output_width}",
+            "boundsHeight": "${output_height}"
+          }
+        },
+        {
+          "sourceName": "DefaultCamera2",
+          "inputKind": "dshow_input",
+          "inputSettings": {
+            "device_id": "default"
+          },
+          "transform": {
+            "positionX": 960,
+            "positionY": 540,
+            "rotation": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "alignment": 9,
+            "boundsType": "OBS_BOUNDS_SCALE_OUTER",
+            "boundsAlignment": 9,
+            "boundsWidth": "${boundsWidth}",
+            "boundsHeight": "${boundsHeight}"
+          }
+        },
+        {
+          "sourceName": "DefaultMicrophone",
+          "inputKind": "wasapi_input_capture",
+          "inputSettings": {
+            "device_id": "default"
+          },
+          "transform": {
+            "positionX": 0,
+            "positionY": 0,
+            "rotation": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "alignment": 5,
+            "boundsType": "OBS_BOUNDS_NONE",
+            "boundsAlignment": 0,
+            "boundsWidth": 1,
+            "boundsHeight": 1
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -32,8 +32,11 @@ export const api = {
     return handleResponse(axios.post(`/api/backup/restore/${scenarioName}`))
   },
   listDevices: () => handleResponse(axios.get('/api/devices')),
-  apply: (cfg) => {
-    return handleResponse(axios.post('/api/apply', cfg))
+  exportTo: (cfg) => {
+    return handleResponse(axios.post('/api/export', cfg))
+  },
+  importFrom: (cfg) => {
+    return handleResponse(axios.post('/api/import', cfg))
   },
 
   listStudents: () => handleResponse(axios.get('/api/students')),

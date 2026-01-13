@@ -1,11 +1,20 @@
+venv/
+
 __pycache__/
 *.pyc
-.venv/
+*.pyo
+*.pyd
 
 .env
 *.log
 
+scenario.json
+
+.vscode/*
+!.vscode/launch.json
+
 node_modules/
 **/package-lock.json
 
+**/backup_*/
 tests/

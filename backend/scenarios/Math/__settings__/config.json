@@ -19,5 +19,12 @@
     "is_stub": true,
     "kind": "stub",
     "name": "Нет микрофона"
-  }
+  },
+  "camera_settings": [
+    {},
+    {
+      "boundsWidth": 320,
+      "boundsHeight": 240
+    }
+  ]
 }
