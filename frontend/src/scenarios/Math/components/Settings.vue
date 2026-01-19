@@ -16,7 +16,7 @@
         <tr v-for="(cam, idx) in model.cameras" :key="idx">
           <td>Камера {{ idx + 1 }}</td>
           <td>{{ cam.name }}</td>
-          <td>{{ cam.kind }}</td>
+          <td>{{ cam.inputKind }}</td>
           <td>{{ cam.device_id }}</td>
           <td>
             <v-checkbox
@@ -32,7 +32,7 @@
         <tr v-if="model.microphone">
           <td>Микрофон</td>
           <td>{{ model.microphone.name }}</td>
-          <td>{{ model.microphone.kind }}</td>
+          <td>{{ model.microphone.inputKind }}</td>
           <td>{{ model.microphone.device_id }}</td>
           <td></td>
         </tr>
@@ -78,11 +78,11 @@ const cameras = ref(props.cameras)
 const microphones = ref(props.microphones)
 
 function makeStubCamera() {
-  return { device_id: 'stub', name: 'Нет камеры', kind: 'stub', is_stub: true }
+  return { device_id: 'stub', name: 'Нет камеры', inputKind: 'stub', is_stub: true }
 }
 
 function makeStubMicrophone() {
-  return { device_id: 'stub', name: 'Нет микрофона', kind: 'stub', is_stub: true }
+  return { device_id: 'stub', name: 'Нет микрофона', inputKind: 'stub', is_stub: true }
 }
 
 async function refreshDevices() {

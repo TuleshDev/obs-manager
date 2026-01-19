@@ -4,9 +4,25 @@ import re
 
 HINTS = {}
 
+INPUT_KIND_MAP = {
+    "camera": {
+        "windows": "dshow_input",
+        "linux": "v4l2_input",
+        "apple": "av_capture_input",
+        "unknown": "dshow_input"
+    },
+    "microphone": {
+        "windows": "wasapi_input_capture",
+        "linux": "pulse_input_capture",
+        "apple": "coreaudio_input_capture",
+        "unknown": "wasapi_input_capture"
+    }
+}
+
+SKIP_NAMES = {"DefaultCamera", "DefaultCamera1", "DefaultCamera2", "DefaultMicrophone"}
+
 def load_hints(path: str):
     global HINTS
-
     try:
         with open(path, "r", encoding="utf-8") as f:
             HINTS = json.load(f)
@@ -14,10 +30,15 @@ def load_hints(path: str):
         HINTS["aliases"] = {k.lower(): v for k, v in HINTS.get("aliases", {}).items()}
         HINTS["name_hints"] = [s.lower() for s in HINTS.get("name_hints", [])]
         HINTS["id_hints"] = [s.lower() for s in HINTS.get("id_hints", [])]
-    except Exception as e:
-        HINTS = {"manufacturers": [], "aliases": {}, "name_hints": [], "id_hints": []}
+        HINTS["mobile_apps"] = [s.lower() for s in HINTS.get("mobile_apps", [])]
+        HINTS["pc_webcams"] = [s.lower() for s in HINTS.get("pc_webcams", [])]
+    except Exception:
+        HINTS = {
+            "manufacturers": [], "aliases": {}, "name_hints": [],
+            "id_hints": [], "mobile_apps": [], "pc_webcams": []
+        }
 
-def normalize(s):
+def normalize(s: str) -> str:
     return (s or "").strip().lower()
 
 def guess_platform(kind: str) -> str:
@@ -31,9 +52,9 @@ def guess_platform(kind: str) -> str:
 
 def guess_source(name: str, device_id: str) -> str:
     n, d = normalize(name), normalize(device_id)
-    if any(tag in d for tag in ["rtsp://", "rtmp://", "http://", "https://"]) or any(tag in d for tag in ["rtsp", "rtmp"]):
+    if any(tag in d for tag in ["rtsp://", "rtmp://", "http://", "https://"]) or any(tag in d for tag in ["rtsp", "rtmp", "ipcam", "ip webcam"]):
         return "network"
-    if any(tag in n for tag in ["droidcam", "epoccam", "ivcam"]) or any(tag in d for tag in ["droidcam", "epoccam", "ivcam"]):
+    if any(tag in n for tag in HINTS.get("mobile_apps", [])) or any(tag in d for tag in HINTS.get("mobile_apps", [])):
         return "virtual_driver"
     if any(tag in d for tag in ["usb", "vid_", "pid_", "vendor", "product"]) or re.search(r"(vid|pid|usb)", d):
         return "usb"
@@ -61,20 +82,23 @@ def is_mobile_camera(kind: str, name: str, device_id: str) -> tuple[bool, list[s
 
     if any(h in n for h in HINTS["name_hints"]):
         hints.append("name_hint")
-
     if any(h in d for h in HINTS["id_hints"]):
         hints.append("id_hint")
+    if any(app in n for app in HINTS["mobile_apps"]):
+        hints.append("mobile_app")
+    if any(tag in d for tag in ["rtsp", "http", "ipcam"]):
+        hints.append("network")
 
-    source = guess_source(name, device_id)
-    if source in ["network", "virtual_driver"]:
-        hints.append(source)
+    manufacturer = guess_manufacturer(name, device_id)
+    if manufacturer:
+        hints.append(f"manufacturer:{manufacturer}")
 
-    if "av_capture" in k and any(h in (n + " " + d) for h in ["iphone", "ipad", "ios", "facetime"]):
-        hints.append("platform_apple_mobile")
+    if any(pc in n for pc in HINTS["pc_webcams"]):
+        hints.append("pc_webcam_brand")
 
     if any(h in n for h in ["integrated", "built-in", "facetime hd camera"]):
         hints.append("integrated_laptop")
 
-    positive = any(h in hints for h in ["name_hint", "id_hint", "network", "virtual_driver", "platform_apple_mobile"])
-    negative = "integrated_laptop" in hints
+    positive = any(h in hints for h in ["name_hint", "id_hint", "mobile_app", "network", "manufacturer:Apple"])
+    negative = "integrated_laptop" in hints or "pc_webcam_brand" in hints
     return (positive and not negative, hints)

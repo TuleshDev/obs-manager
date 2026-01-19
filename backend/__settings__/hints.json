@@ -1,30 +1,9 @@
 {
   "manufacturers": [
-    "Apple",
-    "Samsung",
-    "Huawei",
-    "Xiaomi",
-    "Oppo",
-    "Vivo",
-    "OnePlus",
-    "Google",
-    "Sony",
-    "LG",
-    "Nokia",
-    "Motorola",
-    "Realme",
-    "Honor",
-    "Asus",
-    "ZTE",
-    "Meizu",
-    "Lenovo",
-    "Tecno",
-    "Infinix",
-    "Itel",
-    "BlackBerry",
-    "Panasonic",
-    "Sharp",
-    "Alcatel"
+    "Apple", "Samsung", "Huawei", "Xiaomi", "Oppo", "Vivo", "OnePlus",
+    "Google", "Sony", "LG", "Nokia", "Motorola", "Realme", "Honor",
+    "Asus", "ZTE", "Meizu", "Lenovo", "Tecno", "Infinix", "Itel",
+    "BlackBerry", "Panasonic", "Sharp", "Alcatel"
   ],
   "aliases": {
     "iPhone": "Apple",
@@ -40,34 +19,25 @@
     "Zenfone": "Asus"
   },
   "name_hints": [
-    "iphone",
-    "ipad",
-    "android",
-    "pixel",
-    "galaxy",
-    "xperia",
-    "redmi",
-    "mi ",
-    "honor",
-    "moto",
-    "nexus",
-    "zenfone"
+    "iphone", "ipad", "android", "pixel", "galaxy", "xperia",
+    "redmi", "mi ", "honor", "moto", "nexus", "zenfone"
   ],
   "id_hints": [
-    "adb",
-    "android",
-    "iphone",
-    "ios",
-    "ipad",
-    "com.apple.avfoundation",
-    "avfoundation",
-    "ip",
-    "rtsp",
-    "rtmp",
-    "ndihx",
-    "ndi",
-    "droidcam",
-    "epoccam",
-    "ivcam"
+    "adb", "android", "iphone", "ios", "ipad",
+    "com.apple.avfoundation", "avfoundation",
+    "ip", "rtsp", "rtmp", "ndihx", "ndi",
+    "droidcam", "epoccam", "ivcam", "camo"
+  ],
+  "mobile_apps": [
+    "iriun", "droidcam", "epoccam", "camo", "ivcam", "obsbot mobile"
+  ],
+  "pc_webcams": [
+    "logitech", "microsoft", "razer", "elgato", "creative", "asus", "hp", "lenovo"
+  ],
+  "camera_hints": [
+    "camera", "webcam", "uvc", "video", "capture"
+  ],
+  "microphone_hints": [
+    "microphone", "mic", "audio", "input", "sound"
   ]
 }

@@ -15,16 +15,35 @@
       }
     }
   },
+  "inputs": [
+    {
+      "inputName": "DefaultCamera1",
+      "inputKind": "dshow_input",
+      "inputSettings": {
+        "device_id": "default"
+      }
+    },
+    {
+      "inputName": "DefaultCamera2",
+      "inputKind": "dshow_input",
+      "inputSettings": {
+        "device_id": "default"
+      }
+    },
+    {
+      "inputName": "DefaultMicrophone",
+      "inputKind": "wasapi_input_capture",
+      "inputSettings": {
+        "device_id": "default"
+      }
+    }
+  ],
   "scenes": [
     {
-      "name": "MathScene",
+      "name": "MathScene1",
       "items": [
         {
           "sourceName": "DefaultCamera1",
-          "inputKind": "dshow_input",
-          "inputSettings": {
-            "device_id": "default"
-          },
           "transform": {
             "positionX": 0,
             "positionY": 0,
@@ -36,14 +55,11 @@
             "boundsAlignment": 0,
             "boundsWidth": "${output_width}",
             "boundsHeight": "${output_height}"
-          }
+          },
+          "filters": []
         },
         {
           "sourceName": "DefaultCamera2",
-          "inputKind": "dshow_input",
-          "inputSettings": {
-            "device_id": "default"
-          },
           "transform": {
             "positionX": 960,
             "positionY": 540,
@@ -55,14 +71,11 @@
             "boundsAlignment": 9,
             "boundsWidth": "${boundsWidth}",
             "boundsHeight": "${boundsHeight}"
-          }
+          },
+          "filters": []
         },
         {
           "sourceName": "DefaultMicrophone",
-          "inputKind": "wasapi_input_capture",
-          "inputSettings": {
-            "device_id": "default"
-          },
           "transform": {
             "positionX": 0,
             "positionY": 0,
@@ -74,9 +87,53 @@
             "boundsAlignment": 0,
             "boundsWidth": 1,
             "boundsHeight": 1
-          }
+          },
+          "filters": []
         }
-      ]
+      ],
+      "filters": []
+    },
+    {
+      "name": "MathScene2",
+      "items": [
+        {
+          "sourceName": "DefaultCamera2",
+          "transform": {
+            "positionX": 0,
+            "positionY": 0,
+            "rotation": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "alignment": 5,
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsAlignment": 0,
+            "boundsWidth": "${output_width}",
+            "boundsHeight": "${output_height}"
+          },
+          "filters": []
+        },
+        {
+          "sourceName": "DefaultMicrophone",
+          "transform": {
+            "positionX": 0,
+            "positionY": 0,
+            "rotation": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "alignment": 5,
+            "boundsType": "OBS_BOUNDS_NONE",
+            "boundsAlignment": 0,
+            "boundsWidth": 1,
+            "boundsHeight": 1
+          },
+          "filters": []
+        }
+      ],
+      "filters": []
     }
-  ]
+  ],
+  "currentScene": "MathScene1",
+  "transitions": [],
+  "profiles": [],
+  "currentProfile": null
 }

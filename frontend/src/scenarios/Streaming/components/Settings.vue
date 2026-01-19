@@ -16,7 +16,7 @@
         <tr v-if="model.camera">
           <td>Камера</td>
           <td>{{ model.camera.name }}</td>
-          <td>{{ model.camera.kind }}</td>
+          <td>{{ model.camera.inputKind }}</td>
           <td>{{ model.camera.device_id }}</td>
           <td>
             <v-checkbox
@@ -32,7 +32,7 @@
         <tr v-if="model.microphone">
           <td>Микрофон</td>
           <td>{{ model.microphone.name }}</td>
-          <td>{{ model.microphone.kind }}</td>
+          <td>{{ model.microphone.inputKind }}</td>
           <td>{{ model.microphone.device_id }}</td>
           <td></td>
         </tr>
@@ -116,10 +116,10 @@ function applySelection(selection) {
 
 onMounted(() => {
   if (!model.value.camera) {
-    model.value.camera = { device_id: 'stub', name: 'Нет камеры', kind: 'stub', is_stub: true }
+    model.value.camera = { device_id: 'stub', name: 'Нет камеры', inputKind: 'stub', is_stub: true }
   }
   if (!model.value.microphone) {
-    model.value.microphone = { device_id: 'stub', name: 'Нет микрофона', kind: 'stub', is_stub: true }
+    model.value.microphone = { device_id: 'stub', name: 'Нет микрофона', inputKind: 'stub', is_stub: true }
   }
 
   refreshDevices()

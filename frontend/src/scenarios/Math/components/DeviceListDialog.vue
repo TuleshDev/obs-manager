@@ -54,7 +54,7 @@
                 />
               </td>
               <td>{{ c.name }}</td>
-              <td>{{ c.kind }}</td>
+              <td>{{ c.inputKind }}</td>
               <td>{{ c.device_id }}</td>
               <td>
                 <v-checkbox
@@ -91,7 +91,7 @@
                 <v-radio v-model="selectedMicrophoneIndex" name="microphone" :value="index" />
               </td>
               <td>{{ m.name }}</td>
-              <td>{{ m.kind }}</td>
+              <td>{{ m.inputKind }}</td>
               <td>{{ m.device_id }}</td>
               <td></td>
             </tr>
@@ -112,11 +112,11 @@
 import { ref, watch } from 'vue'
 
 function makeStubCamera() {
-  return { device_id: 'stub', name: 'Нет камеры', kind: 'stub', is_stub: true }
+  return { device_id: 'stub', name: 'Нет камеры', inputKind: 'stub', is_stub: true }
 }
 
 function makeStubMicrophone() {
-  return { device_id: 'stub', name: 'Нет микрофона', kind: 'stub', is_stub: true }
+  return { device_id: 'stub', name: 'Нет микрофона', inputKind: 'stub', is_stub: true }
 }
 
 const props = defineProps({
@@ -168,14 +168,14 @@ function checkSelectedCamerasIndices() {
 
 function findDeviceIndex(devices, target, index = 0) {
   if (!devices || devices.length === 0 || !target) return -1
-  if (target.is_stub || target.kind === 'stub') return index
+  if (target.is_stub || target.inputKind === 'stub') return index
   if (target.device_id && target.device_id !== 'unknown') {
     const byId = devices.findIndex(d => d.device_id === target.device_id)
     if (byId !== -1) return byId
   }
-  if (target.kind) {
-    const byKind = devices.findIndex(d => d.kind === target.kind)
-    if (byKind !== -1) return byKind
+  if (target.inputKind) {
+    const byInputKind = devices.findIndex(d => d.inputKind === target.inputKind)
+    if (byInputKind !== -1) return byInputKind
   }
   if (target.name) {
     const byName = devices.findIndex(d => d.name === target.name)

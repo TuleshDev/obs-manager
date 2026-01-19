@@ -1,8 +1,10 @@
 import psutil
 import subprocess
+import threading
 import os
 import shutil
 import json
+import time
 import traceback
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -12,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from models import Base, Student, Scenario
 from models import student_scenario
 
-from libs.hints import load_hints, guess_platform, guess_source, guess_manufacturer, is_mobile_camera
+from libs.hints import HINTS, INPUT_KIND_MAP, SKIP_NAMES, load_hints, guess_platform, guess_source, guess_manufacturer, is_mobile_camera, normalize
 from libs.obs_actions import ObsActions
 from libs.obs_export_import import OBSExportImport
 
@@ -77,20 +79,6 @@ def write_scenario_config(path, scenario_name, cfg, backup_dir=None):
     except Exception as e:
         traceback.print_exc()
 
-def ensure_obs_running():
-    for proc in psutil.process_iter(['name']):
-        if proc.info['name'] and 'obs64.exe' in proc.info['name'].lower():
-            return True
-
-    obs_path = settings.get("obs", {}).get("path", "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe")
-    obs_dir = settings.get("obs", {}).get("dir", "C:\\Program Files\\obs-studio\\bin\\64bit")
-
-    if os.path.exists(obs_path):
-        subprocess.Popen([obs_path], cwd=obs_dir)
-        return True
-
-    return False
-
 settings = get_global_config(SETTINGS_PATH)
 db_password = os.getenv("DB_PASSWORD")
 
@@ -102,34 +90,69 @@ DATABASE_URL = (
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(bind=engine)
 
-ensure_obs_running()
-
 global_cfg = get_global_config(CONFIG_PATH)
 load_hints(HINTS_PATH)
+devices_lock = threading.Lock()
 
-try:
-    ws_password = os.getenv("WS_PASSWORD")
+class ObsNotRunningError(Exception):
+    pass
 
-    obs = ObsActions(
-        host=global_cfg.get("ws_host", "127.0.0.1"),
-        port=global_cfg.get("ws_port", 4455),
-        password=ws_password
+class ObsConnectionError(Exception):
+    pass
+
+def ensure_obs_ready(retries: int = 3, delay: int = 3):
+    global obs
+
+    obs_running = any(
+        proc.info['name'] and 'obs64.exe' in proc.info['name'].lower()
+        for proc in psutil.process_iter(['name'])
     )
-except Exception as e:
-    traceback.print_exc()
-    obs = None
 
-def make_stub(name="Нет устройства", kind="stub"):
+    if not obs_running:
+        obs_path = settings.get("obs", {}).get("path", r"C:\Program Files\obs-studio\bin\64bit\obs64.exe")
+        obs_dir = settings.get("obs", {}).get("dir", r"C:\Program Files\obs-studio\bin\64bit")
+        if os.path.exists(obs_path):
+            subprocess.Popen([obs_path], cwd=obs_dir)
+            obs_running = True
+
+    if not obs_running:
+        raise ObsNotRunningError("OBS Studio не запущен и не удалось стартовать процесс.")
+
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            if obs is None or not obs.is_connected():
+                ws_password = os.getenv("WS_PASSWORD")
+                obs = ObsActions(
+                    host=global_cfg.get("ws_host", "127.0.0.1"),
+                    port=global_cfg.get("ws_port", 4455),
+                    password=ws_password
+                )
+            if obs.is_connected():
+                return obs
+        except Exception as e:
+            last_error = e
+            obs = None
+            traceback.print_exc()
+
+        time.sleep(delay)
+
+    raise ObsConnectionError(f"Не удалось подключиться к OBS WebSocket после {retries} попыток: {last_error}")
+
+obs = None
+ensure_obs_ready()
+
+def make_stub(name="Нет устройства", input_kind="stub"):
     return {
         "device_id": "stub",
         "name": name,
-        "kind": kind,
+        "inputKind": input_kind,
         "is_stub": True
     }
 
 @app.before_request
 def check_obs():
-    ensure_obs_running()
+    ensure_obs_ready()
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
@@ -215,141 +238,323 @@ def restore_backup(scenario):
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
 
+def classify_device(inp, hints):
+    input_kind = inp.get("inputKind") or ""
+    name = inp.get("inputName") or inp.get("sourceName") or ""
+    settings = inp.get("inputSettings", {}) or {}
+    device_id = settings.get("device_id") or settings.get("device", "") or "unknown"
+
+    if name in SKIP_NAMES:
+        return None, None
+
+    lname = name.lower()
+
+    if "dshow" in input_kind or "v4l2" in input_kind or "av_capture" in input_kind:
+        return "camera", (input_kind, name, device_id)
+    if "wasapi" in input_kind or "pulse" in input_kind or "coreaudio" in input_kind:
+        return "microphone", (input_kind, name, device_id)
+
+    if device_id != "unknown":
+        if any(word in lname for word in hints.get("camera_hints", [])):
+            return "camera", (input_kind or "dshow_input", name, device_id)
+        if any(word in lname for word in hints.get("microphone_hints", [])):
+            return "microphone", (input_kind or "wasapi_input_capture", name, device_id)
+        if any(word in device_id.lower() for word in hints.get("id_hints", [])):
+            return "camera", (input_kind or "dshow_input", name, device_id)
+
+    return None, None
+
+def get_audio_property_items(client, input_name, input_kind):
+    candidates = ["device_id", "device", "audio_device_id"]
+
+    last_err = None
+    for prop in candidates:
+        try:
+            return client.get_input_properties_list_property_items(input_name, prop).property_items
+        except Exception as e:
+            last_err = e
+            continue
+    k = (input_kind or "").lower()
+    if "pulse" in k or "coreaudio" in k:
+        try:
+            return client.get_input_properties_list_property_items(input_name, "device").property_items
+        except Exception as e:
+            last_err = e
+
+    raise last_err
+
+def get_input_kind(kind: str, platform: str) -> str:
+    return INPUT_KIND_MAP.get(kind, {}).get(platform, "dshow_input")
+
+def build_device_info(kind, name, device_id, input_kind=None):
+    platform = guess_platform(input_kind or get_input_kind(kind, None))
+    source = guess_source(name, device_id)
+    manufacturer = guess_manufacturer(name, device_id)
+    info = {
+        "name": name,
+        "kind": kind,
+        "device_id": device_id,
+        "platform": platform,
+        "source": source,
+        "manufacturer": manufacturer,
+        "inputKind": input_kind or get_input_kind(kind, platform)
+    }
+    if kind == "camera":
+        mobile, hints_list = is_mobile_camera(input_kind or "dshow_input", name, device_id)
+        info["is_mobile"] = mobile
+        info["hints"] = hints_list
+        info["scrcpy"] = False
+    return info
+
 @app.route("/api/devices", methods=["GET"])
 def get_devices():
-    if obs is None:
-        return jsonify({"status": "error", "message": "OBS клиент не инициализирован"}), 500
     try:
-        inputs = obs.client.get_input_list().inputs
-        cameras, microphones = [], []
+        obs = ensure_obs_ready()
+    except ObsNotRunningError:
+        return jsonify({"status": "error", "message": "OBS не запущен."}), 500
+    except ObsConnectionError as e:
+        return jsonify({"status": "error", "message": f"Ошибка подключения: {e}"}), 500
 
-        for inp in inputs:
-            kind = inp.get("inputKind", "")
-            name = inp.get("inputName", "")
-            settings = inp.get("inputSettings", {}) or {}
-            device_id = settings.get("device_id") or settings.get("device", "") or "unknown"
+    with devices_lock:
+        try:
+            cameras, microphones = [], []
 
-            platform = guess_platform(kind)
-            source = guess_source(name, device_id)
+            temp_scene = obs.ensure_unique_scene_name("TempSceneForDevices")
+            scenes = obs.client.get_scene_list().scenes
+            if not any(s["sceneName"] == temp_scene for s in scenes):
+                obs.client.create_scene(temp_scene)
+            obs.client.set_current_program_scene(temp_scene)
 
-            if "dshow" in kind or "v4l2" in kind or "av_capture" in kind:
-                mobile, hints = is_mobile_camera(kind, name, device_id)
-                manufacturer = guess_manufacturer(name, device_id)
+            cam_source = obs.ensure_unique_input_name("TempVideoCapture")
+            mic_source = obs.ensure_unique_input_name("TempAudioCapture")
 
-                cameras.append({
-                    "name": name,
-                    "kind": kind,
-                    "device_id": device_id,
-                    "platform": platform,          # windows/linux/apple/unknown
-                    "source": source,              # usb/network/virtual_driver/unknown
-                    "is_mobile": mobile,           # True/False
-                    "manufacturer": manufacturer,  # for example "Apple", "Samsung", or null
-                    "hints": hints                 # list of successful heuristics for transparency
-                })
+            obs.client.create_input(
+                sceneName=temp_scene,
+                inputName=cam_source,
+                inputKind="dshow_input",
+                inputSettings={},
+                sceneItemEnabled=True
+            )
+            obs.client.create_input(
+                sceneName=temp_scene,
+                inputName=mic_source,
+                inputKind="wasapi_input_capture",
+                inputSettings={},
+                sceneItemEnabled=True
+            )
 
-            elif "wasapi" in kind or "pulse" in kind or "coreaudio" in kind:
-                microphones.append({
-                    "name": name,
-                    "kind": kind,
-                    "device_id": device_id,
-                    "platform": platform,
-                    "source": source
-                })
+            try:
+                cam_items = obs.client.get_input_properties_list_property_items(cam_source, "video_device_id").property_items
+                for dev in cam_items:
+                    cameras.append(build_device_info("camera", dev["itemName"], dev["itemValue"], "dshow_input"))
+            except Exception:
+                traceback.print_exc()
 
-        return jsonify({
-            "status": "ok",
-            "cameras": cameras,
-            "microphones": microphones
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+            try:
+                mic_items = get_audio_property_items(obs.client, mic_source, "wasapi_input_capture")
+                for dev in mic_items:
+                    microphones.append(build_device_info("microphone", dev["itemName"], dev["itemValue"], "wasapi_input_capture"))
+            except Exception:
+                traceback.print_exc()
+
+            resp = obs.client.get_input_list()
+            for inp in resp.inputs:
+                if inp["inputName"] in {"TempVideoCapture", "TempAudioCapture"}:
+                    continue
+
+                kind, data = classify_device(inp, HINTS)
+                if kind == "camera":
+                    cameras.append(build_device_info("camera", data[1], data[2], data[0]))
+                elif kind == "microphone":
+                    microphones.append(build_device_info("microphone", data[1], data[2], data[0]))
+
+            obs.client.remove_scene(temp_scene)
+
+            # try:
+            #     obs.client.save_project()
+            # except Exception:
+            #     traceback.print_exc()
+
+            return jsonify({"status": "ok", "cameras": cameras, "microphones": microphones})
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/api/export", methods=["POST"])
 def export_to_obs():
-    if obs is None:
-        return jsonify({"status": "error", "message": "OBS клиент не инициализирован"}), 500
     try:
-        data = request.get_json(force=True) or {}
-        global_cfg = data.get("global", {})
-        scenario_cfg = data.get("scenario", {})
-        scenario_name = data.get("scenario_name")
-        use_template = data.get("use_template")
+        obs = ensure_obs_ready()
+    except ObsNotRunningError:
+        return jsonify({"status": "error", "message": "OBS не запущен."}), 500
+    except ObsConnectionError as e:
+        return jsonify({"status": "error", "message": f"Ошибка подключения: {e}"}), 500
 
-        if global_cfg.get("allow_delete_scenes", True):
-            obs.clear_scenes()
-            # obs.clear_profiles()
+    with devices_lock:
+        try:
+            data = request.get_json(force=True) or {}
+            global_cfg = data.get("global", {})
+            scenario_cfg = data.get("scenario", {})
+            scenario_name = data.get("scenario_name")
+            use_template = data.get("use_template")
 
-        scenario_dir = os.path.join(BASE_DIR, "scenarios", scenario_name)
-        if not os.path.isdir(scenario_dir):
-            return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
+            if global_cfg.get("allow_delete_scenes", True):
+                obs.clear_scenes()
+                # obs.clear_profiles()
 
-        scenario_path = os.path.join(scenario_dir, "__settings__", "scenario.json")
-
-        if use_template:
-            scenario_template_path = os.path.join(scenario_dir, "__settings__", "scenario_template.json")
-            scenario_template_data = get_global_config(scenario_template_path)
-
-            video_settings = scenario_template_data["profile"]["settings"]["video"]
-            out_w = video_settings["output_width"]
-            out_h = video_settings["output_height"]
+            scenario_dir = os.path.join(BASE_DIR, "scenarios", scenario_name)
+            if not os.path.isdir(scenario_dir):
+                return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
 
             config_path = os.path.join(scenario_dir, "__settings__", "config.json")
             config_data = get_global_config(config_path)
 
             camera_settings = config_data.get("camera_settings", [])
+            if scenario_name == "Math":
+                cameras = config_data.get("cameras", [])
+            else:
+                cameras = []
+                cameras.append(config_data.get("camera", {}))
+            microphone = config_data.get("microphone", {})
 
-            for scene in scenario_template_data["scenes"]:
-                for idx, item in enumerate(scene["items"]):
-                    transform = item.get("transform", {})
-                    if transform.get("boundsWidth") == "${output_width}":
-                        transform["boundsWidth"] = out_w
-                    if transform.get("boundsHeight") == "${output_height}":
-                        transform["boundsHeight"] = out_h
+            scenario_path = os.path.join(scenario_dir, "__settings__", "scenario.json")
 
-                    if scenario_name == "Math" and idx == 1:
-                        if transform.get("boundsWidth") == "${boundsWidth}":
-                            transform["boundsWidth"] = camera_settings[idx].get("boundsWidth", 320)
-                        if transform.get("boundsHeight") == "${boundsHeight}":
-                            transform["boundsHeight"] = camera_settings[idx].get("boundsHeight", 240)
+            if use_template:
+                scenario_template_path = os.path.join(scenario_dir, "__settings__", "scenario_template.json")
+                scenario_template_data = get_global_config(scenario_template_path)
 
-            write_global_config(scenario_path, scenario_template_data)
+                video_settings = scenario_template_data["profile"]["settings"]["video"]
+                out_w = video_settings["output_width"]
+                out_h = video_settings["output_height"]
 
-        obs_export_import = OBSExportImport(obs.client)
-        obs_export_import.load_from_file(scenario_path)
+                for scene in scenario_template_data["scenes"]:
+                    for idx, item in enumerate(scene["items"]):
+                        if item.get("sourceName", "").startswith("DefaultCamera"):
+                            transform = item.get("transform", {})
+                            if transform.get("boundsWidth") == "${output_width}":
+                                transform["boundsWidth"] = out_w
+                            if transform.get("boundsHeight") == "${output_height}":
+                                transform["boundsHeight"] = out_h
 
-        return jsonify({"status": "ok", "message": "Сцены и источники обновлены в OBS"})
-    except RuntimeError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+                            if scenario_name == "Math" and idx == 1:
+                                if transform.get("boundsWidth") == "${boundsWidth}":
+                                    transform["boundsWidth"] = camera_settings[idx].get("boundsWidth", 320)
+                                if transform.get("boundsHeight") == "${boundsHeight}":
+                                    transform["boundsHeight"] = camera_settings[idx].get("boundsHeight", 240)
+
+                write_global_config(scenario_path, scenario_template_data)
+
+            scenario_data = get_global_config(scenario_path)
+
+            inputs = scenario_data.get("inputs", [])
+
+            for idx, cam in enumerate(cameras):
+                if not cam.get("is_stub", False):
+                    found = next((i for i in inputs if i["inputName"] == "DefaultCamera"), None)
+                    if found:
+                        found["inputKind"] = cam.get("inputKind", found.get("inputKind"))
+                        found["inputSettings"] = {"video_device_id": cam.get("device_id", "unknown")}
+                    else:
+                        inputs.append({
+                            "inputName": "DefaultCamera",
+                            "inputKind": cam.get("inputKind", "dshow_input"),
+                            "inputSettings": {"video_device_id": cam.get("device_id", "unknown")}
+                        })
+
+            if microphone:
+                found = next((i for i in inputs if i["inputName"] == "DefaultMicrophone"), None)
+                if found:
+                    found["inputKind"] = microphone.get("inputKind", found.get("inputKind"))
+                    found["inputSettings"] = {"device_id": microphone.get("device_id", "unknown")}
+                else:
+                    inputs.append({
+                        "inputName": "DefaultMicrophone",
+                        "inputKind": microphone.get("inputKind", "wasapi_input_capture"),
+                        "inputSettings": {"device_id": microphone.get("device_id", "unknown")}
+                    })
+
+            scenario_data["inputs"] = inputs
+            write_global_config(scenario_path, scenario_data)
+
+            obs_export_import = OBSExportImport(obs)
+            obs_export_import.load_from_file(scenario_path)
+
+            return jsonify({"status": "ok", "message": "Сцены и источники обновлены в OBS"})
+        except RuntimeError as e:
+            return jsonify({"status": "error", "message": str(e)}), 400
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/api/import", methods=["POST"])
 def import_from_obs():
-    if obs is None:
-        return jsonify({"status": "error", "message": "OBS клиент не инициализирован"}), 500
     try:
-        data = request.get_json(force=True) or {}
-        global_cfg = data.get("global", {})
-        scenario_cfg = data.get("scenario", {})
-        scenario_name = data.get("scenario_name")
+        obs = ensure_obs_ready()
+    except ObsNotRunningError:
+        return jsonify({"status": "error", "message": "OBS не запущен."}), 500
+    except ObsConnectionError as e:
+        return jsonify({"status": "error", "message": f"Ошибка подключения: {e}"}), 500
 
-        scenario_dir = os.path.join(BASE_DIR, "scenarios", scenario_name)
-        if not os.path.isdir(scenario_dir):
-            return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
+    with devices_lock:
+        try:
+            data = request.get_json(force=True) or {}
+            global_cfg = data.get("global", {})
+            scenario_cfg = data.get("scenario", {})
+            scenario_name = data.get("scenario_name")
 
-        scenario_path = os.path.join(scenario_dir, "__settings__", "scenario.json")
+            scenario_dir = os.path.join(BASE_DIR, "scenarios", scenario_name)
+            if not os.path.isdir(scenario_dir):
+                return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
 
-        obs_export_import = OBSExportImport(obs.client)
-        obs_export_import.save_to_file(scenario_path)
+            scenario_path = os.path.join(scenario_dir, "__settings__", "scenario.json")
+            config_path = os.path.join(scenario_dir, "__settings__", "config.json")
 
-        return jsonify({"status": "ok", "message": "Настройки импортированы из OBS"})
-    except RuntimeError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+            obs_export_import = OBSExportImport(obs)
+            obs_export_import.save_to_file(scenario_path)
+
+            scenario_data = get_global_config(scenario_path)
+            cameras, microphones = [], []
+
+            for inp in scenario_data.get("inputs", []):
+                if inp["inputName"] in {"DefaultCamera", "DefaultCamera1", "DefaultCamera2"}:
+                    video_id = inp["inputSettings"].get("video_device_id")
+                    try:
+                        cam_items = obs.client.get_input_properties_list_property_items(inp["inputName"], "video_device_id").property_items
+                        for dev in cam_items:
+                            if dev["itemValue"] == video_id:
+                                cameras.append(build_device_info("camera", dev["itemName"], dev["itemValue"], inp["inputKind"]))
+                                break
+                    except Exception:
+                        traceback.print_exc()
+
+                elif inp["inputName"] == "DefaultMicrophone":
+                    mic_id = inp["inputSettings"].get("device_id")
+                    try:
+                        mic_items = get_audio_property_items(obs.client, inp["inputName"], "wasapi_input_capture")
+                        for dev in mic_items:
+                            if dev["itemValue"] == mic_id:
+                                microphones.append(build_device_info("microphone", dev["itemName"], dev["itemValue"], inp["inputKind"]))
+                                break
+                    except Exception:
+                        traceback.print_exc()
+
+            config_data = get_global_config(config_path)
+            if cameras:
+                if scenario_name == "Math":
+                    config_data["cameras"].append(cameras[0])
+                    config_data["cameras"].append(cameras[1])
+                else:
+                    config_data["camera"] = cameras[0]
+            if microphones:
+                config_data["microphone"] = microphones[0]
+
+            write_global_config(config_path, config_data)
+
+            return jsonify({"status": "ok", "message": "Настройки импортированы из OBS"})
+        except RuntimeError as e:
+            return jsonify({"status": "error", "message": str(e)}), 400
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/api/students", methods=["GET"])
 def get_students():

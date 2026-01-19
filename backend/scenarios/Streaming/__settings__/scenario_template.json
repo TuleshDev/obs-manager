@@ -15,16 +15,28 @@
       }
     }
   },
+  "inputs": [
+    {
+      "inputName": "DefaultCamera",
+      "inputKind": "dshow_input",
+      "inputSettings": {
+        "device_id": "default"
+      }
+    },
+    {
+      "inputName": "DefaultMicrophone",
+      "inputKind": "wasapi_input_capture",
+      "inputSettings": {
+        "device_id": "default"
+      }
+    }
+  ],
   "scenes": [
     {
       "name": "StreamingScene",
       "items": [
         {
           "sourceName": "DefaultCamera",
-          "inputKind": "dshow_input",
-          "inputSettings": {
-            "device_id": "default"
-          },
           "transform": {
             "positionX": 0,
             "positionY": 0,
@@ -36,14 +48,11 @@
             "boundsAlignment": 0,
             "boundsWidth": "${output_width}",
             "boundsHeight": "${output_height}"
-          }
+          },
+          "filters": []
         },
         {
           "sourceName": "DefaultMicrophone",
-          "inputKind": "wasapi_input_capture",
-          "inputSettings": {
-            "device_id": "default"
-          },
           "transform": {
             "positionX": 0,
             "positionY": 0,
@@ -55,9 +64,15 @@
             "boundsAlignment": 0,
             "boundsWidth": 1,
             "boundsHeight": 1
-          }
+          },
+          "filters": []
         }
-      ]
+      ],
+      "filters": []
     }
-  ]
+  ],
+  "currentScene": "StreamingScene",
+  "transitions": [],
+  "profiles": [],
+  "currentProfile": null
 }
