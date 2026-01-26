@@ -1,10 +1,7 @@
-import psutil
-import subprocess
-import threading
 import os
-import shutil
 import json
-import time
+import shutil
+import threading
 import traceback
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -15,7 +12,7 @@ from models import Base, Student, Scenario
 from models import student_scenario
 
 from libs.hints import HINTS, INPUT_KIND_MAP, SKIP_NAMES, load_hints, guess_platform, guess_source, guess_manufacturer, is_mobile_camera, normalize
-from libs.obs_actions import ObsActions
+from libs.obs_actions import ObsActions, ObsNotRunningError, ObsConnectionError
 from libs.obs_export_import import OBSExportImport
 
 app = Flask(__name__)
@@ -94,53 +91,11 @@ global_cfg = get_global_config(CONFIG_PATH)
 load_hints(HINTS_PATH)
 devices_lock = threading.Lock()
 
-class ObsNotRunningError(Exception):
-    pass
-
-class ObsConnectionError(Exception):
-    pass
-
-def ensure_obs_ready(retries: int = 3, delay: int = 3):
-    global obs
-
-    obs_running = any(
-        proc.info['name'] and 'obs64.exe' in proc.info['name'].lower()
-        for proc in psutil.process_iter(['name'])
-    )
-
-    if not obs_running:
-        obs_path = settings.get("obs", {}).get("path", r"C:\Program Files\obs-studio\bin\64bit\obs64.exe")
-        obs_dir = settings.get("obs", {}).get("dir", r"C:\Program Files\obs-studio\bin\64bit")
-        if os.path.exists(obs_path):
-            subprocess.Popen([obs_path], cwd=obs_dir)
-            obs_running = True
-
-    if not obs_running:
-        raise ObsNotRunningError("OBS Studio не запущен и не удалось стартовать процесс.")
-
-    last_error = None
-    for attempt in range(1, retries + 1):
-        try:
-            if obs is None or not obs.is_connected():
-                ws_password = os.getenv("WS_PASSWORD")
-                obs = ObsActions(
-                    host=global_cfg.get("ws_host", "127.0.0.1"),
-                    port=global_cfg.get("ws_port", 4455),
-                    password=ws_password
-                )
-            if obs.is_connected():
-                return obs
-        except Exception as e:
-            last_error = e
-            obs = None
-            traceback.print_exc()
-
-        time.sleep(delay)
-
-    raise ObsConnectionError(f"Не удалось подключиться к OBS WebSocket после {retries} попыток: {last_error}")
+def get_obs_instance():
+    return ObsActions.ensure_obs_ready(global_cfg, settings)
 
 obs = None
-ensure_obs_ready()
+get_obs_instance()
 
 def make_stub(name="Нет устройства", input_kind="stub"):
     return {
@@ -150,9 +105,9 @@ def make_stub(name="Нет устройства", input_kind="stub"):
         "is_stub": True
     }
 
-@app.before_request
-def check_obs():
-    ensure_obs_ready()
+# @app.before_request
+# def check_obs():
+#     get_obs_instance()
 
 @app.route("/api/config", methods=["GET"])
 def get_config():
@@ -294,22 +249,22 @@ def build_device_info(kind, name, device_id, input_kind=None):
         "name": name,
         "kind": kind,
         "device_id": device_id,
-        "platform": platform,
-        "source": source,
-        "manufacturer": manufacturer,
+        "platform": platform,          # windows/linux/apple/unknown
+        "source": source,              # usb/network/virtual_driver/unknown
+        "manufacturer": manufacturer,  # for example "Apple", "Samsung", or null
         "inputKind": input_kind or get_input_kind(kind, platform)
     }
     if kind == "camera":
         mobile, hints_list = is_mobile_camera(input_kind or "dshow_input", name, device_id)
-        info["is_mobile"] = mobile
-        info["hints"] = hints_list
+        info["is_mobile"] = mobile     # True/False
+        info["hints"] = hints_list     # list of successful heuristics for transparency
         info["scrcpy"] = False
     return info
 
 @app.route("/api/devices", methods=["GET"])
 def get_devices():
     try:
-        obs = ensure_obs_ready()
+        obs = get_obs_instance()
     except ObsNotRunningError:
         return jsonify({"status": "error", "message": "OBS не запущен."}), 500
     except ObsConnectionError as e:
@@ -383,7 +338,7 @@ def get_devices():
 @app.route("/api/export", methods=["POST"])
 def export_to_obs():
     try:
-        obs = ensure_obs_ready()
+        obs = get_obs_instance()
     except ObsNotRunningError:
         return jsonify({"status": "error", "message": "OBS не запущен."}), 500
     except ObsConnectionError as e:
@@ -488,7 +443,7 @@ def export_to_obs():
 @app.route("/api/import", methods=["POST"])
 def import_from_obs():
     try:
-        obs = ensure_obs_ready()
+        obs = get_obs_instance()
     except ObsNotRunningError:
         return jsonify({"status": "error", "message": "OBS не запущен."}), 500
     except ObsConnectionError as e:
