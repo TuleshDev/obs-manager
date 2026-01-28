@@ -21,10 +21,55 @@
     "name": "Нет микрофона"
   },
   "camera_settings": [
-    {},
     {
-      "boundsWidth": 320,
-      "boundsHeight": 240
+      "mobile": {
+        "apps_to_close": [
+          "com.facebook.katana",
+          "com.whatsapp",
+          "com.instagram.android"
+        ],
+        "camera_id": 1,
+        "camera_package": "com.jacksoftw.webcam",
+        "close_mode": "all",
+        "device_serial": "",
+        "tap_coordinates": {
+          "flash_toggle": [
+            950,
+            1800
+          ],
+          "switch_camera": [
+            1000,
+            200
+          ]
+        }
+      }
+    },
+    {
+      "base": {
+        "boundsHeight": 240,
+        "boundsWidth": 320
+      },
+      "mobile": {
+        "apps_to_close": [
+          "com.facebook.katana",
+          "com.whatsapp",
+          "com.instagram.android"
+        ],
+        "camera_id": 1,
+        "camera_package": "com.jacksoftw.webcam",
+        "close_mode": "all",
+        "device_serial": "",
+        "tap_coordinates": {
+          "flash_toggle": [
+            950,
+            1800
+          ],
+          "switch_camera": [
+            1000,
+            200
+          ]
+        }
+      }
     }
   ]
 }

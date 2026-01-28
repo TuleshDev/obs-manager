@@ -8,5 +8,8 @@
   "obs": {
     "path": "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
     "dir": "C:\\Program Files\\obs-studio\\bin\\64bit"
+  },
+  "IriunWebcam": {
+    "path": "C:\\Android\\Iriun Webcam\\IriunWebcam.exe"
   }
 }

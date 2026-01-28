@@ -26,6 +26,7 @@
           :item-value="slot => slot"
           label="Выберите камеру"
           class="mb-3"
+          @update:modelValue="onCameraSlotChange"
         />
 
         <v-table class="device-table">
@@ -147,10 +148,15 @@ function isSelected(index) {
 
 function isDisabled(index) {
   if (activeCameraSlot.value === 1 && selectedCamerasIndices.value[0] === index) {
-    index === 0 ? selectedCamerasIndices.value[1] = 1 : selectedCamerasIndices.value[1] = 0
     return true
   }
   return false
+}
+
+function onCameraSlotChange(index) {
+  if (index === 1 && selectedCamerasIndices.value[0] === selectedCamerasIndices.value[1]) {
+    selectedCamerasIndices.value[0] === 0 ? selectedCamerasIndices.value[1] = 1 : selectedCamerasIndices.value[1] = 0
+  }
 }
 
 function selectCamera(index) {
@@ -224,6 +230,12 @@ function updateDevices() {
   }
 
   checkSelectedCamerasIndices()
+
+  selectedCamerasIndices.value.forEach((camIdx, idx) => {
+    if (camIdx !== null && props.cameras[camIdx].is_mobile) {
+      props.cameras[camIdx].scrcpy = props.selectedCameras[idx].scrcpy
+    }
+  })
 
   const idxMic = findDeviceIndex(props.microphones, props.selectedMicrophone)
   selectedMicrophoneIndex.value = idxMic !== -1 ? idxMic : 0

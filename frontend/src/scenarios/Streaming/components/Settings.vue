@@ -83,7 +83,8 @@ async function refreshDevices() {
     microphones.value = res.microphones || []
 
     cameras.value.forEach(c => {
-      if (c.is_mobile && c.scrcpy === undefined) {
+      // if (c.is_mobile && c.scrcpy === undefined) {
+      if (c.is_mobile) {
         c.scrcpy = true
       } else {
         c.scrcpy = false

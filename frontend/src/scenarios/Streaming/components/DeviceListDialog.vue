@@ -147,6 +147,10 @@ function updateDevices() {
   const idxCam = findDeviceIndex(props.cameras, props.selectedCamera)
   selectedCameraIndex.value = idxCam !== -1 ? idxCam : 0
 
+  if (props.cameras[selectedCameraIndex.value].is_mobile) {
+    props.cameras[selectedCameraIndex.value].scrcpy = props.selectedCamera.scrcpy
+  }
+
   const idxMic = findDeviceIndex(props.microphones, props.selectedMicrophone)
   selectedMicrophoneIndex.value = idxMic !== -1 ? idxMic : 0
 }

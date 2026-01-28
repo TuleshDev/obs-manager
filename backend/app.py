@@ -12,6 +12,7 @@ from models import Base, Student, Scenario
 from models import student_scenario
 
 from libs.hints import HINTS, INPUT_KIND_MAP, SKIP_NAMES, load_hints, guess_platform, guess_source, guess_manufacturer, is_mobile_camera, normalize
+from libs.android_actions import AndroidActions
 from libs.obs_actions import ObsActions, ObsNotRunningError, ObsConnectionError
 from libs.obs_export_import import OBSExportImport
 
@@ -90,8 +91,28 @@ SessionLocal = sessionmaker(bind=engine)
 global_cfg = get_global_config(CONFIG_PATH)
 load_hints(HINTS_PATH)
 devices_lock = threading.Lock()
+android_cameras = {}
+
+def setup_mobile_camera(camera_id, scrcpy, config_data, settings_data):
+    if camera_id in android_cameras:
+        android_cameras[camera_id].stop()
+
+    android_cameras[camera_id] = AndroidActions.create(scrcpy, config_data, settings_data)
+    return android_cameras[camera_id]
+
+def stop_mobile_camera(camera_id):
+    if camera_id in android_cameras:
+        android_cameras[camera_id].stop()
+        del android_cameras[camera_id]
+
+def stop_all_mobile_cameras():
+    for cam in list(android_cameras.values()):
+        cam.stop()
+    android_cameras.clear()
 
 def get_obs_instance():
+    global settings
+
     return ObsActions.ensure_obs_ready(global_cfg, settings)
 
 obs = None
@@ -143,6 +164,8 @@ def get_config():
 
 @app.route("/api/config", methods=["PUT"])
 def update_config():
+    stop_all_mobile_cameras()
+
     data = request.get_json(force=True) or {}
     global_cfg = data.get("global", {})
     scenario_cfg = data.get("scenario", {})
@@ -196,8 +219,8 @@ def restore_backup(scenario):
 def classify_device(inp, hints):
     input_kind = inp.get("inputKind") or ""
     name = inp.get("inputName") or inp.get("sourceName") or ""
-    settings = inp.get("inputSettings", {}) or {}
-    device_id = settings.get("device_id") or settings.get("device", "") or "unknown"
+    settings_data = inp.get("inputSettings", {}) or {}
+    device_id = settings_data.get("device_id") or settings_data.get("device", "") or "unknown"
 
     if name in SKIP_NAMES:
         return None, None
@@ -337,12 +360,7 @@ def get_devices():
 
 @app.route("/api/export", methods=["POST"])
 def export_to_obs():
-    try:
-        obs = get_obs_instance()
-    except ObsNotRunningError:
-        return jsonify({"status": "error", "message": "OBS не запущен."}), 500
-    except ObsConnectionError as e:
-        return jsonify({"status": "error", "message": f"Ошибка подключения: {e}"}), 500
+    global settings
 
     with devices_lock:
         try:
@@ -352,24 +370,46 @@ def export_to_obs():
             scenario_name = data.get("scenario_name")
             use_template = data.get("use_template")
 
-            if global_cfg.get("allow_delete_scenes", True):
-                obs.clear_scenes()
-                # obs.clear_profiles()
-
             scenario_dir = os.path.join(BASE_DIR, "scenarios", scenario_name)
             if not os.path.isdir(scenario_dir):
                 return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
 
             config_path = os.path.join(scenario_dir, "__settings__", "config.json")
             config_data = get_global_config(config_path)
-
             camera_settings = config_data.get("camera_settings", [])
+
             if scenario_name == "Math":
                 cameras = config_data.get("cameras", [])
             else:
                 cameras = []
                 cameras.append(config_data.get("camera", {}))
             microphone = config_data.get("microphone", {})
+
+            # stop_all_mobile_cameras()
+
+            for idx, settings_data in enumerate(camera_settings):
+                cam = cameras[idx]
+                is_mobile = cam.get("is_mobile", False)
+                scrcpy = cam.get("scrcpy", False)
+                if is_mobile:
+                    mobile_data = settings_data.get("mobile")
+                    if mobile_data:
+                        device_serial = mobile_data.get("device_serial", "")
+                        if device_serial:
+                            camera_id = mobile_data.get("camera_id", idx)
+                            print(f"Запуск AndroidActions для мобильной камеры {camera_id}...")
+                            setup_mobile_camera(camera_id, scrcpy, mobile_data, settings)
+
+            try:
+                obs = get_obs_instance()
+            except ObsNotRunningError:
+                return jsonify({"status": "error", "message": "OBS не запущен."}), 500
+            except ObsConnectionError as e:
+                return jsonify({"status": "error", "message": f"Ошибка подключения: {e}"}), 500
+
+            if global_cfg.get("allow_delete_scenes", True):
+                obs.clear_scenes()
+                # obs.clear_profiles()
 
             scenario_path = os.path.join(scenario_dir, "__settings__", "scenario.json")
 
@@ -391,10 +431,13 @@ def export_to_obs():
                                 transform["boundsHeight"] = out_h
 
                             if scenario_name == "Math" and idx == 1:
+                                settings_data = camera_settings[idx]
+
+                                base = settings_data.get("base", {})
                                 if transform.get("boundsWidth") == "${boundsWidth}":
-                                    transform["boundsWidth"] = camera_settings[idx].get("boundsWidth", 320)
+                                    transform["boundsWidth"] = base.get("boundsWidth", 320)
                                 if transform.get("boundsHeight") == "${boundsHeight}":
-                                    transform["boundsHeight"] = camera_settings[idx].get("boundsHeight", 240)
+                                    transform["boundsHeight"] = base.get("boundsHeight", 240)
 
                 write_global_config(scenario_path, scenario_template_data)
 
