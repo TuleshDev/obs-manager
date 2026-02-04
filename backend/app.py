@@ -3,6 +3,7 @@ import json
 import shutil
 import threading
 import traceback
+from collections import OrderedDict
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -55,6 +56,79 @@ def get_scenario_config(path, scenario_name):
 
     return cfg
 
+def reorder_config(data):
+
+    def sort_object(obj):
+        if isinstance(obj, dict):
+            return OrderedDict((k, sort_object(v)) for k, v in sorted(obj.items()))
+        elif isinstance(obj, list):
+            return [sort_object(v) for v in obj]
+        else:
+            return obj
+
+    def sort_with_name_device(obj):
+        if isinstance(obj, dict):
+            ordered = OrderedDict()
+            if "name" in obj:
+                ordered["name"] = sort_object(obj["name"])
+            if "device_id" in obj:
+                ordered["device_id"] = sort_object(obj["device_id"])
+            for k in sorted(obj.keys()):
+                if k not in ("name", "device_id"):
+                    ordered[k] = sort_object(obj[k])
+            return ordered
+        return obj
+
+    def sort_mobile(obj):
+        if isinstance(obj, dict):
+            ordered = OrderedDict()
+            if "device_serial" in obj:
+                ordered["device_serial"] = sort_object(obj["device_serial"])
+            for k in sorted(obj.keys()):
+                if k != "device_serial":
+                    ordered[k] = sort_object(obj[k])
+            return ordered
+        return obj
+
+    def sort_camera_settings(settings):
+        if isinstance(settings, list):
+            new_settings = []
+            for item in settings:
+                if isinstance(item, dict):
+                    ordered_item = OrderedDict()
+                    for k in sorted(item.keys()):
+                        if k == "mobile" and isinstance(item[k], dict):
+                            ordered_item[k] = sort_mobile(item[k])
+                        else:
+                            ordered_item[k] = sort_object(item[k])
+                    new_settings.append(ordered_item)
+                else:
+                    new_settings.append(item)
+            return new_settings
+        elif isinstance(settings, dict):
+            return sort_object(settings)
+        return settings
+
+    ordered = OrderedDict()
+
+    for key in ["allow_delete_scenes", "cameras", "camera", "microphone", "camera_settings"]:
+        if key in data:
+            if key == "cameras" and isinstance(data[key], list):
+                data[key] = sorted(data[key], key=lambda x: x.get("name", ""))
+                data[key] = [sort_with_name_device(cam) for cam in data[key]]
+            elif key == "camera" and isinstance(data[key], dict):
+                data[key] = sort_with_name_device(data[key])
+            elif key == "microphone" and isinstance(data[key], dict):
+                data[key] = sort_with_name_device(data[key])
+            elif key == "camera_settings":
+                data[key] = sort_camera_settings(data[key])
+            ordered[key] = data[key]
+
+    for key in sorted(k for k in data.keys() if k not in ["allow_delete_scenes", "cameras", "camera", "microphone", "camera_settings"]):
+        ordered[key] = sort_object(data[key])
+
+    return ordered
+
 def write_scenario_config(path, scenario_name, cfg, backup_dir=None):
     try:
         settings_dir = os.path.join(path, "scenarios", scenario_name, "__settings__")
@@ -72,8 +146,10 @@ def write_scenario_config(path, scenario_name, cfg, backup_dir=None):
                 if os.path.exists(src):
                     shutil.copy2(src, dst)
 
+        ordered_cfg = reorder_config(cfg)
+
         with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
+            json.dump(ordered_cfg, f, ensure_ascii=False, indent=2)
     except Exception as e:
         traceback.print_exc()
 
@@ -93,11 +169,11 @@ load_hints(HINTS_PATH)
 devices_lock = threading.Lock()
 android_cameras = {}
 
-def setup_mobile_camera(camera_id, scrcpy, config_data, settings_data):
+def setup_mobile_camera(camera_id, scrcpy, scrcpy_title, config_data, settings_data):
     if camera_id in android_cameras:
         android_cameras[camera_id].stop()
 
-    android_cameras[camera_id] = AndroidActions.create(scrcpy, config_data, settings_data)
+    android_cameras[camera_id] = AndroidActions.create(scrcpy, scrcpy_title, config_data, settings_data)
     return android_cameras[camera_id]
 
 def stop_mobile_camera(camera_id):
@@ -324,14 +400,18 @@ def get_devices():
             try:
                 cam_items = obs.client.get_input_properties_list_property_items(cam_source, "video_device_id").property_items
                 for dev in cam_items:
-                    cameras.append(build_device_info("camera", dev["itemName"], dev["itemValue"], "dshow_input"))
+                    cameras.append(build_device_info(
+                        "camera", dev["itemName"], dev["itemValue"], "dshow_input"
+                    ))
             except Exception:
                 traceback.print_exc()
 
             try:
                 mic_items = get_audio_property_items(obs.client, mic_source, "wasapi_input_capture")
                 for dev in mic_items:
-                    microphones.append(build_device_info("microphone", dev["itemName"], dev["itemValue"], "wasapi_input_capture"))
+                    microphones.append(build_device_info(
+                        "microphone", dev["itemName"], dev["itemValue"], "wasapi_input_capture"
+                    ))
             except Exception:
                 traceback.print_exc()
 
@@ -342,9 +422,13 @@ def get_devices():
 
                 kind, data = classify_device(inp, HINTS)
                 if kind == "camera":
-                    cameras.append(build_device_info("camera", data[1], data[2], data[0]))
+                    cameras.append(build_device_info(
+                        "camera", data[1], data[2], data[0]
+                    ))
                 elif kind == "microphone":
-                    microphones.append(build_device_info("microphone", data[1], data[2], data[0]))
+                    microphones.append(build_device_info(
+                        "microphone", data[1], data[2], data[0]
+                    ))
 
             obs.client.remove_scene(temp_scene)
 
@@ -387,18 +471,27 @@ def export_to_obs():
 
             # stop_all_mobile_cameras()
 
+            scrcpy_keywords = []
+
             for idx, settings_data in enumerate(camera_settings):
                 cam = cameras[idx]
                 is_mobile = cam.get("is_mobile", False)
                 scrcpy = cam.get("scrcpy", False)
+                scrcpy_keywords.append("")
                 if is_mobile:
                     mobile_data = settings_data.get("mobile")
                     if mobile_data:
                         device_serial = mobile_data.get("device_serial", "")
                         if device_serial:
+                            device_id = cam.get('device_id', '')
                             camera_id = mobile_data.get("camera_id", idx)
+                            scrcpy_title = (
+                                f"scrcpy (device_serial: {device_serial}, "
+                                f"device_id: {device_id})"
+                            )
+                            scrcpy_keywords[idx] = ["scrcpy", device_serial, device_id]
                             print(f"Запуск AndroidActions для мобильной камеры {camera_id}...")
-                            setup_mobile_camera(camera_id, scrcpy, mobile_data, settings)
+                            setup_mobile_camera(camera_id, scrcpy, scrcpy_title, mobile_data, settings)
 
             try:
                 obs = get_obs_instance()
@@ -447,15 +540,42 @@ def export_to_obs():
 
             for idx, cam in enumerate(cameras):
                 if not cam.get("is_stub", False):
-                    found = next((i for i in inputs if i["inputName"] == "DefaultCamera"), None)
+                    # found = next((i for i in inputs if i["inputName"] in {"DefaultCamera", "DefaultCamera1", "DefaultCamera2"}), None)
+                    found = next((i for i in inputs if i["inputName"] in {"DefaultCamera", f"DefaultCamera{idx+1}"}), None)
+
+                    settings_data = camera_settings[idx]
+                    base_data = settings_data.get("base")
+                    mobile_data = settings_data.get("mobile")
+
+                    is_mobile = cam.get("is_mobile", False)
+                    scrcpy = cam.get("scrcpy", False)
+
+                    if mobile_data and is_mobile and scrcpy:
+                        input_kind = "window_capture"
+                        camera_id = mobile_data.get("camera_id", idx)
+                        android_cameras[camera_id].wait_for_scrcpy_ready()
+                        scrcpy_title = obs.import_window_captures(scrcpy_keywords[idx])
+                        input_settings = {
+                            "window": scrcpy_title,
+                            "capture_cursor": False,
+                            "crop_left": base_data.get("crop_left", 0),
+                            "crop_right": base_data.get("crop_right", 0),
+                            "crop_top": base_data.get("crop_top", 0),
+                            "crop_bottom": base_data.get("crop_bottom", 0),
+                        }
+                    else:
+                        # input_kind = cam.get("inputKind", "dshow_input")
+                        input_kind = cam.get("inputKind", found.get("inputKind"))
+                        input_settings = {"video_device_id": cam.get("device_id", "unknown")}
+
                     if found:
-                        found["inputKind"] = cam.get("inputKind", found.get("inputKind"))
-                        found["inputSettings"] = {"video_device_id": cam.get("device_id", "unknown")}
+                        found["inputKind"] = input_kind
+                        found["inputSettings"] = input_settings
                     else:
                         inputs.append({
-                            "inputName": "DefaultCamera",
+                            "inputName": f"DefaultCamera{idx+1}",
                             "inputKind": cam.get("inputKind", "dshow_input"),
-                            "inputSettings": {"video_device_id": cam.get("device_id", "unknown")}
+                            "inputSettings": input_settings
                         })
 
             if microphone:
@@ -471,7 +591,8 @@ def export_to_obs():
                     })
 
             scenario_data["inputs"] = inputs
-            write_global_config(scenario_path, scenario_data)
+            ordered_scenario_data = OBSExportImport.reorder_scenario(scenario_data)
+            write_global_config(scenario_path, ordered_scenario_data)
 
             obs_export_import = OBSExportImport(obs)
             obs_export_import.load_from_file(scenario_path)
@@ -504,7 +625,10 @@ def import_from_obs():
                 return jsonify({"status": "error", "message": "Сценарий не найден"}), 404
 
             scenario_path = os.path.join(scenario_dir, "__settings__", "scenario.json")
+
             config_path = os.path.join(scenario_dir, "__settings__", "config.json")
+            config_data = get_global_config(config_path)
+            camera_settings = config_data.get("camera_settings", [])
 
             obs_export_import = OBSExportImport(obs)
             obs_export_import.save_to_file(scenario_path)
@@ -512,32 +636,71 @@ def import_from_obs():
             scenario_data = get_global_config(scenario_path)
             cameras, microphones = [], []
 
+            camIdx = -1
             for inp in scenario_data.get("inputs", []):
                 if inp["inputName"] in {"DefaultCamera", "DefaultCamera1", "DefaultCamera2"}:
-                    video_id = inp["inputSettings"].get("video_device_id")
-                    try:
-                        cam_items = obs.client.get_input_properties_list_property_items(inp["inputName"], "video_device_id").property_items
-                        for dev in cam_items:
-                            if dev["itemValue"] == video_id:
-                                cameras.append(build_device_info("camera", dev["itemName"], dev["itemValue"], inp["inputKind"]))
-                                break
-                    except Exception:
-                        traceback.print_exc()
+                    camIdx += 1
+                    if inp["inputKind"] == "window_capture":
+                        scrcpy_title = inp["inputSettings"].get("window", "")
+                        scrcpy_title = obs.decode_obs_title(scrcpy_title)
+                        if scrcpy_title.startswith("scrcpy (") and ")" in scrcpy_title:
+                            start = scrcpy_title.find("(") + 1
+                            end = scrcpy_title.find(")", start)
+                            if end != -1:
+                                inner = scrcpy_title[start:end]
+                                parts = [p.strip() for p in inner.split(",")]
+                                device_serial, device_id = "", ""
+                                for p in parts:
+                                    if p.startswith("device_serial:"):
+                                        device_serial = p.split(":", 1)[1].strip()
+                                    elif p.startswith("device_id:"):
+                                        device_id = p.split(":", 1)[1].strip()
 
+                                dev = obs.import_video_captures(device_id)
+                                dev_info = build_device_info(
+                                    "camera", dev["itemName"], dev["itemValue"], inp["inputKind"]
+                                )
+                                dev_info["inputKind"] = "dshow_input"
+                                dev_info["scrcpy"] = True
+                                cameras.append(dev_info)
+
+                                settings_data = camera_settings[camIdx]
+                                base_data = settings_data.get("base")
+
+                                base_data["crop_left"] = inp["inputSettings"].get("crop_left", 0)
+                                base_data["crop_right"] = inp["inputSettings"].get("crop_right", 0)
+                                base_data["crop_top"] = inp["inputSettings"].get("crop_top", 0)
+                                base_data["crop_bottom"] = inp["inputSettings"].get("crop_bottom", 0)
+                    else:
+                        video_id = inp["inputSettings"].get("video_device_id")
+                        try:
+                            cam_items = obs.client.get_input_properties_list_property_items(
+                                inp["inputName"], "video_device_id"
+                            ).property_items
+                            for dev in cam_items:
+                                if dev["itemValue"] == video_id:
+                                    cameras.append(build_device_info(
+                                        "camera", dev["itemName"], dev["itemValue"], inp["inputKind"]
+                                    ))
+                                    break
+                        except Exception:
+                            traceback.print_exc()
                 elif inp["inputName"] == "DefaultMicrophone":
                     mic_id = inp["inputSettings"].get("device_id")
                     try:
                         mic_items = get_audio_property_items(obs.client, inp["inputName"], "wasapi_input_capture")
                         for dev in mic_items:
                             if dev["itemValue"] == mic_id:
-                                microphones.append(build_device_info("microphone", dev["itemName"], dev["itemValue"], inp["inputKind"]))
+                                microphones.append(build_device_info(
+                                    "microphone", dev["itemName"], dev["itemValue"], inp["inputKind"]
+                                ))
                                 break
                     except Exception:
                         traceback.print_exc()
 
-            config_data = get_global_config(config_path)
             if cameras:
                 if scenario_name == "Math":
+                    config_data["cameras"] = []
                     config_data["cameras"].append(cameras[0])
                     config_data["cameras"].append(cameras[1])
                 else:
@@ -545,7 +708,8 @@ def import_from_obs():
             if microphones:
                 config_data["microphone"] = microphones[0]
 
-            write_global_config(config_path, config_data)
+            ordered_config_data = reorder_config(config_data)
+            write_global_config(config_path, ordered_config_data)
 
             return jsonify({"status": "ok", "message": "Настройки импортированы из OBS"})
         except RuntimeError as e:

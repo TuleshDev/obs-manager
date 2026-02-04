@@ -1,3 +1,5 @@
+import psutil
+import pygetwindow as gw
 import subprocess
 import time
 import threading
@@ -5,8 +7,9 @@ import libs.adb_utils as adb_utils
 from typing import Optional
 
 class AndroidActions:
-    def __init__(self, scrcpy: bool, config_data: dict, settings_data: dict):
+    def __init__(self, scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict):
         self.scrcpy = scrcpy
+        self.scrcpy_title = scrcpy_title
         self.config_data = config_data
         self.settings_data = settings_data
 
@@ -30,7 +33,7 @@ class AndroidActions:
         self._ensure_camera_stopped(device_serial, camera_package)
 
         if close_mode == "all":
-            adb_utils.close_all_apps(device_serial)
+            adb_utils.close_all_apps(device_serial, x=511, y=2044)
         else:
             adb_utils.close_specific_apps(device_serial, apps_to_close)
 
@@ -51,7 +54,11 @@ class AndroidActions:
 
     def _start_camera(self, device_serial: str, camera_package: str):
         if self.scrcpy:
-            self.scrcpy_proc = subprocess.Popen(["scrcpy", "--stay-awake"])
+            self.scrcpy_proc = subprocess.Popen([
+                "scrcpy",
+                "--stay-awake",
+                f"--window-title={self.scrcpy_title}"
+            ])
         else:
             adb_utils.launch_app(device_serial, camera_package)
 
@@ -83,6 +90,41 @@ class AndroidActions:
         finally:
             self._restore_settings(device_serial)
 
+    def wait_for_process_ready(self, proc, timeout=180, window_title=None, min_cpu_activity=0.5):
+        start = time.time()
+
+        while time.time() - start < timeout:
+            if proc is not None:
+                if proc.poll() is not None:
+                    raise RuntimeError("Процесс завершился преждевременно")
+
+                if proc.pid is not None:
+                    ps_proc = psutil.Process(proc.pid)
+                    try:
+                        cpu = ps_proc.cpu_percent(interval=1)
+                        if cpu < min_cpu_activity:
+                            time.sleep(1)
+                            continue
+                    except psutil.NoSuchProcess:
+                        raise RuntimeError("Процесс исчез")
+
+                    if window_title:
+                        windows = gw.getWindowsWithTitle(window_title)
+                        if windows:
+                            return True
+                    else:
+                        return True
+
+            time.sleep(1)
+
+        raise TimeoutError(f"Программа не стала готовой за {timeout} секунд")
+
+    def wait_for_scrcpy_ready(self):
+        self.wait_for_process_ready(self.scrcpy_proc, window_title=self.scrcpy_title)
+
+    def wait_for_IriunWebcam_ready(self):
+        self.wait_for_process_ready(self.camera_proc)
+
     def start(self):
         self.stop_flag.clear()
         self.thread = threading.Thread(target=self._pipeline, daemon=True)
@@ -110,7 +152,7 @@ class AndroidActions:
             self.thread = None
 
     @staticmethod
-    def create(scrcpy: bool, config_data: dict, settings_data: dict):
-        instance = AndroidActions(scrcpy, config_data, settings_data)
+    def create(scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict):
+        instance = AndroidActions(scrcpy, scrcpy_title, config_data, settings_data)
         instance.start()
         return instance

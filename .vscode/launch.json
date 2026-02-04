@@ -7,7 +7,9 @@
       "request": "launch",
       "program": "${workspaceFolder}/backend/app.py",
       "console": "integratedTerminal",
-      "justMyCode": false
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/venv/Scripts/python.exe"
     }
   ]
 }

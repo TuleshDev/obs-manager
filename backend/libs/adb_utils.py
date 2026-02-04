@@ -1,4 +1,5 @@
 import subprocess
+import uiautomator2 as u2
 from typing import List, Union
 
 class AdbError(Exception):
@@ -105,8 +106,26 @@ def input_text(serial: str, text: str):
 def send_keyevent(serial: str, keycode: int):
     run_adb_command(serial, f"shell input keyevent {keycode}")
 
-def close_all_apps(serial: str):
-    run_adb_command(serial, "shell am kill-all")
+def close_all_apps(serial: str, x: int = None, y: int = None):
+    d = u2.connect(serial)
+
+    d.press("recent")
+
+    if d(text="Очистить всё").exists:
+        d(text="Очистить всё").click()
+    elif d(text="Закрыть всё").exists:
+        d(text="Закрыть всё").click()
+    elif d(description="Clear all").exists:
+        d(description="Clear all").click()
+    elif d(resourceId="com.android.systemui:id/clear_all").exists:
+        d(resourceId="com.android.systemui:id/clear_all").click()
+    elif x is not None and y is not None:
+        print(f"Нажимаем по координатам ({x}, {y})")
+        d.click(x, y)
+    else:
+        print("Кнопка 'Очистить всё' не найдена и координаты не заданы")
+
+    d.press("home")
 
 def close_specific_apps(serial: str, apps: list):
     for app in apps:

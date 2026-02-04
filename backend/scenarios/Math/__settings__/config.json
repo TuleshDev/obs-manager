@@ -2,36 +2,42 @@
   "allow_delete_scenes": false,
   "cameras": [
     {
+      "name": "Нет камеры",
       "device_id": "stub",
       "is_stub": true,
-      "kind": "stub",
-      "name": "Нет камеры"
+      "kind": "stub"
     },
     {
+      "name": "Нет камеры",
       "device_id": "stub",
       "is_stub": true,
-      "kind": "stub",
-      "name": "Нет камеры"
+      "kind": "stub"
     }
   ],
   "microphone": {
+    "name": "Нет микрофона",
     "device_id": "stub",
     "is_stub": true,
-    "kind": "stub",
-    "name": "Нет микрофона"
+    "kind": "stub"
   },
   "camera_settings": [
     {
+      "base": {
+        "crop_bottom": 0,
+        "crop_left": 0,
+        "crop_right": 0,
+        "crop_top": 0
+      },
       "mobile": {
+        "device_serial": "",
         "apps_to_close": [
           "com.facebook.katana",
           "com.whatsapp",
           "com.instagram.android"
         ],
-        "camera_id": 1,
+        "camera_id": 0,
         "camera_package": "com.jacksoftw.webcam",
         "close_mode": "all",
-        "device_serial": "",
         "tap_coordinates": {
           "flash_toggle": [
             950,
@@ -47,9 +53,14 @@
     {
       "base": {
         "boundsHeight": 240,
-        "boundsWidth": 320
+        "boundsWidth": 320,
+        "crop_bottom": 0,
+        "crop_left": 0,
+        "crop_right": 0,
+        "crop_top": 0
       },
       "mobile": {
+        "device_serial": "",
         "apps_to_close": [
           "com.facebook.katana",
           "com.whatsapp",
@@ -58,7 +69,6 @@
         "camera_id": 1,
         "camera_package": "com.jacksoftw.webcam",
         "close_mode": "all",
-        "device_serial": "",
         "tap_coordinates": {
           "flash_toggle": [
             950,

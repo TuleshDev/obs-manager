@@ -2,16 +2,16 @@
   "profile": {
     "name": "Streaming",
     "settings": {
-      "video": {
-        "base_width": 1920,
-        "base_height": 1080,
-        "output_width": 1280,
-        "output_height": 720,
-        "fps": 30
-      },
       "audio": {
-        "sample_rate": 44100,
-        "channels": 2
+        "channels": 2,
+        "sample_rate": 44100
+      },
+      "video": {
+        "base_height": 1080,
+        "base_width": 1920,
+        "fps": 30,
+        "output_height": 720,
+        "output_width": 1280
       }
     }
   },
@@ -37,42 +37,42 @@
       "items": [
         {
           "sourceName": "DefaultCamera",
+          "filters": [],
           "transform": {
+            "alignment": 5,
+            "boundsAlignment": 0,
+            "boundsHeight": "${output_height}",
+            "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsWidth": "${output_width}",
             "positionX": 0,
             "positionY": 0,
             "rotation": 0.0,
             "scaleX": 1.0,
-            "scaleY": 1.0,
-            "alignment": 5,
-            "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsAlignment": 0,
-            "boundsWidth": "${output_width}",
-            "boundsHeight": "${output_height}"
-          },
-          "filters": []
+            "scaleY": 1.0
+          }
         },
         {
           "sourceName": "DefaultMicrophone",
+          "filters": [],
           "transform": {
+            "alignment": 5,
+            "boundsAlignment": 0,
+            "boundsHeight": 1,
+            "boundsType": "OBS_BOUNDS_NONE",
+            "boundsWidth": 1,
             "positionX": 0,
             "positionY": 0,
             "rotation": 0.0,
             "scaleX": 1.0,
-            "scaleY": 1.0,
-            "alignment": 5,
-            "boundsType": "OBS_BOUNDS_NONE",
-            "boundsAlignment": 0,
-            "boundsWidth": 1,
-            "boundsHeight": 1
-          },
-          "filters": []
+            "scaleY": 1.0
+          }
         }
       ],
       "filters": []
     }
   ],
+  "currentProfile": null,
   "currentScene": "StreamingScene",
-  "transitions": [],
   "profiles": [],
-  "currentProfile": null
+  "transitions": []
 }
