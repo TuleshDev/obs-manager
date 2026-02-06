@@ -49,7 +49,7 @@
             "alignment": 5,
             "boundsAlignment": 0,
             "boundsHeight": "${output_height}",
-            "boundsType": "OBS_BOUNDS_SCALE_INNER",
+            "boundsType": "OBS_BOUNDS_SCALE_OUTER",
             "boundsWidth": "${output_width}",
             "positionX": 0,
             "positionY": 0,

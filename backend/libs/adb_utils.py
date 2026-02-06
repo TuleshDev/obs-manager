@@ -208,6 +208,13 @@ def set_volume(serial: str, level: int):
 def get_volume(serial: str) -> str:
     return get_setting(serial, "system", "volume_music_speaker")
 
+def start_back_camera(serial: str, package: str = None, activity: str = None) -> str:
+    if package and activity:
+        cmd = f"shell am start -n {package}/{activity}"
+        return run_adb_command(serial, cmd)
+    else:
+        return run_adb_command(serial, "shell am start -a android.media.action.VIDEO_CAPTURE")
+
 def switch_camera(serial: str, coords: tuple):
     tap(serial, *coords)
 
@@ -243,6 +250,12 @@ def zoom_out(serial: str, coords: tuple):
 def set_default_zoom(serial: str, coords_out: tuple, steps: int = 3):
     for _ in range(steps):
         zoom_out(serial, coords_out)
+
+def disable_auto_rotation(serial: str):
+    return run_adb_command(serial, "shell settings put system accelerometer_rotation 0")
+
+def enable_auto_rotation(serial: str):
+    return run_adb_command(serial, "shell settings put system accelerometer_rotation 1")
 
 def set_resolution(serial: str, coords: tuple):
     tap(serial, *coords)

@@ -153,6 +153,26 @@ def write_scenario_config(path, scenario_name, cfg, backup_dir=None):
     except Exception as e:
         traceback.print_exc()
 
+def load_phone_config(scenario_name, mobile_data):
+    try:
+        settings_dir = os.path.join(BASE_DIR, "scenarios", scenario_name, "__settings__")
+
+        file_name = mobile_data.get("config_file")
+        if not file_name:
+            return None
+
+        scenario_file_path = os.path.join(settings_dir, file_name)
+        if os.path.exists(scenario_file_path):
+            return get_global_config(scenario_file_path)
+
+        common_file_path = os.path.join(BASE_DIR, "__settings__", file_name)
+        if os.path.exists(common_file_path):
+            return get_global_config(common_file_path)
+
+        return None
+    except Exception as e:
+        traceback.print_exc()
+
 settings = get_global_config(SETTINGS_PATH)
 db_password = os.getenv("DB_PASSWORD")
 
@@ -169,11 +189,11 @@ load_hints(HINTS_PATH)
 devices_lock = threading.Lock()
 android_cameras = {}
 
-def setup_mobile_camera(camera_id, scrcpy, scrcpy_title, config_data, settings_data):
+def setup_mobile_camera(camera_id, scrcpy, scrcpy_title, config_data, settings_data, phone_config):
     if camera_id in android_cameras:
         android_cameras[camera_id].stop()
 
-    android_cameras[camera_id] = AndroidActions.create(scrcpy, scrcpy_title, config_data, settings_data)
+    android_cameras[camera_id] = AndroidActions.create(scrcpy, scrcpy_title, config_data, settings_data, phone_config)
     return android_cameras[camera_id]
 
 def stop_mobile_camera(camera_id):
@@ -491,7 +511,8 @@ def export_to_obs():
                             )
                             scrcpy_keywords[idx] = ["scrcpy", device_serial, device_id]
                             print(f"Запуск AndroidActions для мобильной камеры {camera_id}...")
-                            setup_mobile_camera(camera_id, scrcpy, scrcpy_title, mobile_data, settings)
+                            phone_config = load_phone_config(scenario_name, mobile_data)
+                            setup_mobile_camera(camera_id, scrcpy, scrcpy_title, mobile_data, settings, phone_config)
 
             try:
                 obs = get_obs_instance()
@@ -526,11 +547,11 @@ def export_to_obs():
                             if scenario_name == "Math" and idx == 1:
                                 settings_data = camera_settings[idx]
 
-                                base = settings_data.get("base", {})
+                                base_data = settings_data.get("base", {})
                                 if transform.get("boundsWidth") == "${boundsWidth}":
-                                    transform["boundsWidth"] = base.get("boundsWidth", 320)
+                                    transform["boundsWidth"] = base_data.get("boundsWidth", 320)
                                 if transform.get("boundsHeight") == "${boundsHeight}":
-                                    transform["boundsHeight"] = base.get("boundsHeight", 240)
+                                    transform["boundsHeight"] = base_data.get("boundsHeight", 240)
 
                 write_global_config(scenario_path, scenario_template_data)
 
@@ -544,7 +565,6 @@ def export_to_obs():
                     found = next((i for i in inputs if i["inputName"] in {"DefaultCamera", f"DefaultCamera{idx+1}"}), None)
 
                     settings_data = camera_settings[idx]
-                    base_data = settings_data.get("base")
                     mobile_data = settings_data.get("mobile")
 
                     is_mobile = cam.get("is_mobile", False)
@@ -557,11 +577,7 @@ def export_to_obs():
                         scrcpy_title = obs.import_window_captures(scrcpy_keywords[idx])
                         input_settings = {
                             "window": scrcpy_title,
-                            "capture_cursor": False,
-                            "crop_left": base_data.get("crop_left", 0),
-                            "crop_right": base_data.get("crop_right", 0),
-                            "crop_top": base_data.get("crop_top", 0),
-                            "crop_bottom": base_data.get("crop_bottom", 0),
+                            "capture_cursor": False
                         }
                     else:
                         # input_kind = cam.get("inputKind", "dshow_input")
@@ -628,7 +644,6 @@ def import_from_obs():
 
             config_path = os.path.join(scenario_dir, "__settings__", "config.json")
             config_data = get_global_config(config_path)
-            camera_settings = config_data.get("camera_settings", [])
 
             obs_export_import = OBSExportImport(obs)
             obs_export_import.save_to_file(scenario_path)
@@ -649,11 +664,12 @@ def import_from_obs():
                             if end != -1:
                                 inner = scrcpy_title[start:end]
                                 parts = [p.strip() for p in inner.split(",")]
-                                device_serial, device_id = "", ""
+                                # device_serial = ""
+                                device_id = ""
                                 for p in parts:
-                                    if p.startswith("device_serial:"):
-                                        device_serial = p.split(":", 1)[1].strip()
-                                    elif p.startswith("device_id:"):
+                                    # if p.startswith("device_serial:"):
+                                    #     device_serial = p.split(":", 1)[1].strip()
+                                    if p.startswith("device_id:"):
                                         device_id = p.split(":", 1)[1].strip()
 
                                 dev = obs.import_video_captures(device_id)
@@ -663,14 +679,6 @@ def import_from_obs():
                                 dev_info["inputKind"] = "dshow_input"
                                 dev_info["scrcpy"] = True
                                 cameras.append(dev_info)
-
-                                settings_data = camera_settings[camIdx]
-                                base_data = settings_data.get("base")
-
-                                base_data["crop_left"] = inp["inputSettings"].get("crop_left", 0)
-                                base_data["crop_right"] = inp["inputSettings"].get("crop_right", 0)
-                                base_data["crop_top"] = inp["inputSettings"].get("crop_top", 0)
-                                base_data["crop_bottom"] = inp["inputSettings"].get("crop_bottom", 0)
                     else:
                         video_id = inp["inputSettings"].get("video_device_id")
                         try:

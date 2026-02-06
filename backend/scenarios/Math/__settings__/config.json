@@ -22,12 +22,6 @@
   },
   "camera_settings": [
     {
-      "base": {
-        "crop_bottom": 0,
-        "crop_left": 0,
-        "crop_right": 0,
-        "crop_top": 0
-      },
       "mobile": {
         "device_serial": "",
         "apps_to_close": [
@@ -36,8 +30,9 @@
           "com.instagram.android"
         ],
         "camera_id": 0,
-        "camera_package": "com.jacksoftw.webcam",
         "close_mode": "all",
+        "config_file": "cam_a.json",
+        "driver_package": "com.jacksoftw.webcam",
         "tap_coordinates": {
           "flash_toggle": [
             950,
@@ -53,11 +48,7 @@
     {
       "base": {
         "boundsHeight": 240,
-        "boundsWidth": 320,
-        "crop_bottom": 0,
-        "crop_left": 0,
-        "crop_right": 0,
-        "crop_top": 0
+        "boundsWidth": 320
       },
       "mobile": {
         "device_serial": "",
@@ -67,8 +58,9 @@
           "com.instagram.android"
         ],
         "camera_id": 1,
-        "camera_package": "com.jacksoftw.webcam",
         "close_mode": "all",
+        "config_file": "cam_b.json",
+        "driver_package": "com.jacksoftw.webcam",
         "tap_coordinates": {
           "flash_toggle": [
             950,
