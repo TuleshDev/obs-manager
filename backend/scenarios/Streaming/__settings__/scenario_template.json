@@ -41,9 +41,9 @@
           "transform": {
             "alignment": 5,
             "boundsAlignment": 0,
-            "boundsHeight": "${output_height}",
+            "boundsHeight": "${base_height}",
             "boundsType": "OBS_BOUNDS_SCALE_INNER",
-            "boundsWidth": "${output_width}",
+            "boundsWidth": "${base_width}",
             "positionX": 0,
             "positionY": 0,
             "rotation": 0.0,

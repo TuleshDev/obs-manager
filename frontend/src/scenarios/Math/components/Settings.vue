@@ -9,7 +9,7 @@
           <th class="col-name">Имя</th>
           <th class="col-kind">Тип</th>
           <th class="col-id">Device ID</th>
-          <th class="col-scrcpy">scrcpy</th>
+          <th class="col-is-scrcpy">scrcpy</th>
         </tr>
       </thead>
       <tbody>
@@ -21,7 +21,7 @@
           <td>
             <v-checkbox
               v-if="cam.is_mobile"
-              v-model="cam.scrcpy"
+              v-model="cam.is_scrcpy"
               :true-value="true"
               :false-value="false"
               hide-details
@@ -92,11 +92,11 @@ async function refreshDevices() {
     microphones.value = res.microphones || []
 
     cameras.value.forEach(c => {
-      // if (c.is_mobile && c.scrcpy === undefined) {
+      // if (c.is_mobile && c.is_scrcpy === undefined) {
       if (c.is_mobile) {
-        c.scrcpy = true
+        c.is_scrcpy = true
       } else {
-        c.scrcpy = false
+        c.is_scrcpy = false
       }
     })
 
@@ -154,7 +154,7 @@ function applySelection(selection) {
   if (selection.cameras) {
     model.value.cameras = selection.cameras.map(c => ({
       ...c,
-      scrcpy: c.scrcpy ?? (c.is_mobile ? true : false)
+      is_scrcpy: c.is_scrcpy ?? (c.is_mobile ? true : false)
     }))
   }
   if (selection.microphone) {
@@ -210,7 +210,7 @@ onMounted(() => {
 .col-id {
   width: 250px;
 }
-.col-scrcpy {
+.col-is-scrcpy {
   width: 100px;
 }
 

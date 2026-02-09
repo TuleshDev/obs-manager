@@ -189,11 +189,11 @@ load_hints(HINTS_PATH)
 devices_lock = threading.Lock()
 android_cameras = {}
 
-def setup_mobile_camera(camera_id, scrcpy, scrcpy_title, config_data, settings_data, phone_config):
+def setup_mobile_camera(camera_id, is_scrcpy, scrcpy_title, config_data, settings_data, phone_config):
     if camera_id in android_cameras:
         android_cameras[camera_id].stop()
 
-    android_cameras[camera_id] = AndroidActions.create(scrcpy, scrcpy_title, config_data, settings_data, phone_config)
+    android_cameras[camera_id] = AndroidActions.create(is_scrcpy, scrcpy_title, config_data, settings_data, phone_config)
     return android_cameras[camera_id]
 
 def stop_mobile_camera(camera_id):
@@ -377,7 +377,7 @@ def build_device_info(kind, name, device_id, input_kind=None):
         mobile, hints_list = is_mobile_camera(input_kind or "dshow_input", name, device_id)
         info["is_mobile"] = mobile     # True/False
         info["hints"] = hints_list     # list of successful heuristics for transparency
-        info["scrcpy"] = False
+        info["is_scrcpy"] = False
     return info
 
 @app.route("/api/devices", methods=["GET"])
@@ -496,7 +496,7 @@ def export_to_obs():
             for idx, settings_data in enumerate(camera_settings):
                 cam = cameras[idx]
                 is_mobile = cam.get("is_mobile", False)
-                scrcpy = cam.get("scrcpy", False)
+                is_scrcpy = cam.get("is_scrcpy", False)
                 scrcpy_keywords.append("")
                 if is_mobile:
                     mobile_data = settings_data.get("mobile")
@@ -512,7 +512,7 @@ def export_to_obs():
                             scrcpy_keywords[idx] = ["scrcpy", device_serial, device_id]
                             print(f"Запуск AndroidActions для мобильной камеры {camera_id}...")
                             phone_config = load_phone_config(scenario_name, mobile_data)
-                            setup_mobile_camera(camera_id, scrcpy, scrcpy_title, mobile_data, settings, phone_config)
+                            setup_mobile_camera(camera_id, is_scrcpy, scrcpy_title, mobile_data, settings, phone_config)
 
             try:
                 obs = get_obs_instance()
@@ -532,17 +532,17 @@ def export_to_obs():
                 scenario_template_data = get_global_config(scenario_template_path)
 
                 video_settings = scenario_template_data["profile"]["settings"]["video"]
-                out_w = video_settings["output_width"]
-                out_h = video_settings["output_height"]
+                base_w = video_settings["base_width"]
+                base_h = video_settings["base_height"]
 
                 for scene in scenario_template_data["scenes"]:
                     for idx, item in enumerate(scene["items"]):
                         if item.get("sourceName", "").startswith("DefaultCamera"):
                             transform = item.get("transform", {})
-                            if transform.get("boundsWidth") == "${output_width}":
-                                transform["boundsWidth"] = out_w
-                            if transform.get("boundsHeight") == "${output_height}":
-                                transform["boundsHeight"] = out_h
+                            if transform.get("boundsWidth") == "${base_width}":
+                                transform["boundsWidth"] = base_w
+                            if transform.get("boundsHeight") == "${base_height}":
+                                transform["boundsHeight"] = base_h
 
                             if scenario_name == "Math" and idx == 1:
                                 settings_data = camera_settings[idx]
@@ -550,8 +550,10 @@ def export_to_obs():
                                 base_data = settings_data.get("base", {})
                                 if transform.get("boundsWidth") == "${boundsWidth}":
                                     transform["boundsWidth"] = base_data.get("boundsWidth", 320)
+                                    transform["positionX"] = base_w - transform["boundsWidth"]
                                 if transform.get("boundsHeight") == "${boundsHeight}":
                                     transform["boundsHeight"] = base_data.get("boundsHeight", 240)
+                                    transform["positionY"] = base_h - transform["boundsHeight"]
 
                 write_global_config(scenario_path, scenario_template_data)
 
@@ -568,9 +570,9 @@ def export_to_obs():
                     mobile_data = settings_data.get("mobile")
 
                     is_mobile = cam.get("is_mobile", False)
-                    scrcpy = cam.get("scrcpy", False)
+                    is_scrcpy = cam.get("is_scrcpy", False)
 
-                    if mobile_data and is_mobile and scrcpy:
+                    if mobile_data and is_mobile and is_scrcpy:
                         input_kind = "window_capture"
                         camera_id = mobile_data.get("camera_id", idx)
                         android_cameras[camera_id].wait_for_scrcpy_ready()
@@ -677,7 +679,7 @@ def import_from_obs():
                                     "camera", dev["itemName"], dev["itemValue"], inp["inputKind"]
                                 )
                                 dev_info["inputKind"] = "dshow_input"
-                                dev_info["scrcpy"] = True
+                                dev_info["is_scrcpy"] = True
                                 cameras.append(dev_info)
                     else:
                         video_id = inp["inputSettings"].get("video_device_id")

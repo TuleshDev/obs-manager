@@ -7,8 +7,8 @@ import libs.adb_utils as adb_utils
 from typing import Optional
 
 class AndroidActions:
-    def __init__(self, scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict, phone_config: str):
-        self.scrcpy = scrcpy
+    def __init__(self, is_scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict, phone_config: str):
+        self.is_scrcpy = is_scrcpy
         self.scrcpy_title = scrcpy_title
         self.config_data = config_data
         self.settings_data = settings_data
@@ -56,7 +56,7 @@ class AndroidActions:
             print(f"Не удалось восстановить настройки телефона: {e}")
 
     def _start_camera(self, device_serial: str, driver_package: str):
-        if self.scrcpy:
+        if self.is_scrcpy:
             camera_package = None
             camera_activity = None
             scrcpy_command = None
@@ -106,7 +106,7 @@ class AndroidActions:
                 if not any(proc.poll() is None for proc in active_procs):
                     break
 
-                if not self.scrcpy and not adb_utils.is_app_running(device_serial, driver_package):
+                if not self.is_scrcpy and not adb_utils.is_app_running(device_serial, driver_package):
                     print("⚠️ Iriun Webcam не работает, перезапуск...")
                     adb_utils.restart_app(device_serial, driver_package)
 
@@ -177,7 +177,7 @@ class AndroidActions:
             self.thread = None
 
     @staticmethod
-    def create(scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict, phone_config: str):
-        instance = AndroidActions(scrcpy, scrcpy_title, config_data, settings_data, phone_config)
+    def create(is_scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict, phone_config: str):
+        instance = AndroidActions(is_scrcpy, scrcpy_title, config_data, settings_data, phone_config)
         instance.start()
         return instance

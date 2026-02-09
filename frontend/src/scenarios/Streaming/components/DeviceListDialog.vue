@@ -25,7 +25,7 @@
               <th class="col-name">Имя</th>
               <th class="col-kind">Тип</th>
               <th class="col-id">Device ID</th>
-              <th class="col-scrcpy">scrcpy</th>
+              <th class="col-is-scrcpy">scrcpy</th>
             </tr>
           </thead>
           <tbody>
@@ -48,7 +48,7 @@
               <td>
                 <v-checkbox
                   v-if="c.is_mobile"
-                  v-model="c.scrcpy"
+                  v-model="c.is_scrcpy"
                   :true-value="true"
                   :false-value="false"
                   hide-details
@@ -66,7 +66,7 @@
               <th class="col-name">Имя</th>
               <th class="col-kind">Тип</th>
               <th class="col-id">Device ID</th>
-              <th class="col-scrcpy"></th>
+              <th class="col-is-scrcpy"></th>
             </tr>
           </thead>
           <tbody>
@@ -139,8 +139,8 @@ function findDeviceIndex(devices, target, index = 0) {
 
 function updateDevices() {
   props.cameras.forEach(c => {
-    if (c.is_mobile && c.scrcpy === undefined) {
-      c.scrcpy = true
+    if (c.is_mobile && c.is_scrcpy === undefined) {
+      c.is_scrcpy = true
     }
   })
 
@@ -148,7 +148,7 @@ function updateDevices() {
   selectedCameraIndex.value = idxCam !== -1 ? idxCam : 0
 
   if (props.cameras[selectedCameraIndex.value].is_mobile) {
-    props.cameras[selectedCameraIndex.value].scrcpy = props.selectedCamera.scrcpy
+    props.cameras[selectedCameraIndex.value].is_scrcpy = props.selectedCamera.is_scrcpy
   }
 
   const idxMic = findDeviceIndex(props.microphones, props.selectedMicrophone)
@@ -197,7 +197,7 @@ function cancelSelection() {
 .col-id {
   width: 250px;
 }
-.col-scrcpy {
+.col-is-scrcpy {
   width: 100px;
 }
 

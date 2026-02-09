@@ -48,7 +48,7 @@
     {
       "base": {
         "boundsHeight": 240,
-        "boundsWidth": 320
+        "boundsWidth": 240
       },
       "mobile": {
         "device_serial": "",
