@@ -1,15 +1,23 @@
 import psutil
 import pygetwindow as gw
+import queue
 import subprocess
 import time
 import threading
 import libs.adb_utils as adb_utils
 from typing import Optional
 
+def enqueue_output(proc, q):
+    for line in proc.stdout:
+        q.put(line)
+    proc.stdout.close()
+
 class AndroidActions:
     def __init__(self, is_scrcpy: bool, scrcpy_title: str, config_data: dict, settings_data: dict, phone_config: str):
         self.is_scrcpy = is_scrcpy
         self.scrcpy_title = scrcpy_title
+        self.scrcpy_command = ""
+        self.scrcpy_no_window = False
         self.config_data = config_data
         self.settings_data = settings_data
         self.phone_config = phone_config
@@ -57,21 +65,21 @@ class AndroidActions:
 
     def _start_camera(self, device_serial: str, driver_package: str):
         if self.is_scrcpy:
+            self.get_scrcpy_command()
+
             camera_package = None
             camera_activity = None
-            scrcpy_command = None
             if self.phone_config:
                 camera_package = self.phone_config.get("camera_package")
                 camera_activity = self.phone_config.get("camera_activity")
-                scrcpy_command = self.phone_config.get("scrcpy_command")
 
             if camera_package and camera_activity:
                 adb_utils.start_back_camera(device_serial, camera_package, camera_activity)
             else:
                 adb_utils.start_back_camera(device_serial)
 
-            if scrcpy_command:
-                args = scrcpy_command.split()
+            if self.scrcpy_command:
+                args = self.scrcpy_command.split()
             else:
                 args = [
                     "scrcpy",
@@ -81,8 +89,17 @@ class AndroidActions:
                     "--max-fps", "15"
                 ]
 
-            args.append(f"--window-title={self.scrcpy_title}")
-            self.scrcpy_proc = subprocess.Popen(args)
+            if not self.scrcpy_no_window:
+                args.append(f"--window-title={self.scrcpy_title}")
+                self.scrcpy_proc = subprocess.Popen(args)
+            else:
+                self.scrcpy_proc = subprocess.Popen(
+                    args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
         else:
             adb_utils.launch_app(device_serial, driver_package)
 
@@ -114,12 +131,28 @@ class AndroidActions:
         finally:
             self._restore_settings(device_serial)
 
-    def wait_for_process_ready(self, proc_getter, timeout=180, window_title=None, min_cpu_activity=0.5):
+    def wait_for_process_ready(self, proc_getter, timeout=180, window_title=None,
+                               min_cpu_activity=0.5, stdout_ready_texts=None):
+        is_stdout_used = False
+        if stdout_ready_texts:
+            is_stdout_used = True
+            q = queue.Queue()
+
         start = time.time()
 
+        is_proc_started = False
         while time.time() - start < timeout:
             proc = proc_getter()
-            if proc is not None:
+            if not is_proc_started:
+                if not is_stdout_used:
+                    if proc:
+                        is_proc_started = True
+                else:
+                    if proc and proc.stdout:
+                        t = threading.Thread(target=enqueue_output, args=(proc, q), daemon=True)
+                        t.start()
+                        is_proc_started = True
+            else:
                 if proc.poll() is not None:
                     raise RuntimeError("Процесс завершился преждевременно")
 
@@ -127,7 +160,7 @@ class AndroidActions:
                     ps_proc = psutil.Process(proc.pid)
                     try:
                         cpu = ps_proc.cpu_percent(interval=1)
-                        if cpu < min_cpu_activity:
+                        if cpu < min_cpu_activity and not is_stdout_used:
                             time.sleep(1)
                             continue
                     except psutil.NoSuchProcess:
@@ -137,6 +170,14 @@ class AndroidActions:
                         windows = gw.getWindowsWithTitle(window_title)
                         if windows:
                             return True
+                    elif stdout_ready_texts:
+                        try:
+                            line = q.get_nowait()
+                        except queue.Empty:
+                            pass
+                        else:
+                            if any(text in line for text in stdout_ready_texts):
+                                return True
                     else:
                         return True
 
@@ -144,8 +185,23 @@ class AndroidActions:
 
         raise TimeoutError(f"Программа не стала готовой за {timeout} секунд")
 
+    def get_scrcpy_command(self):
+        if not self.scrcpy_command:
+            if self.phone_config:
+                self.scrcpy_command = self.phone_config.get("scrcpy_command")
+
+            if self.scrcpy_command:
+                if "--no-window" in self.scrcpy_command:
+                    self.scrcpy_no_window = True
+
     def wait_for_scrcpy_ready(self):
-        self.wait_for_process_ready(lambda: self.scrcpy_proc, window_title=self.scrcpy_title)
+        self.get_scrcpy_command()
+
+        if not self.scrcpy_no_window:
+            self.wait_for_process_ready(lambda: self.scrcpy_proc, window_title=self.scrcpy_title)
+        else:
+            # self.wait_for_process_ready(lambda: self.scrcpy_proc, stdout_ready_texts=["INFO: Connected to", "INFO: Recording started"])
+            self.wait_for_process_ready(lambda: self.scrcpy_proc, stdout_ready_texts=["INFO: ADB device found:\n"])
 
     def wait_for_IriunWebcam_ready(self):
         self.wait_for_process_ready(lambda: self.camera_proc)
