@@ -42,7 +42,7 @@ class AndroidActions:
         self._ensure_camera_stopped(device_serial, driver_package)
 
         if close_mode == "all":
-            adb_utils.close_all_apps(device_serial, x=511, y=2044)
+            self.run_adb_command(device_serial, "close_all_apps")
         else:
             adb_utils.close_specific_apps(device_serial, apps_to_close)
 
@@ -237,3 +237,21 @@ class AndroidActions:
         instance = AndroidActions(is_scrcpy, scrcpy_title, config_data, settings_data, phone_config)
         instance.start()
         return instance
+
+    COMMANDS = {
+        "close_all_apps": adb_utils.close_all_apps
+    }
+
+    def run_adb_command(self, device_serial: str, command_name: str):
+        cmd = self.COMMANDS.get(command_name)
+        if not cmd:
+            raise ValueError(f"Команда {command_name} не найдена")
+
+        kwargs = {"serial": device_serial}
+
+        if self.phone_config:
+            coords = self.phone_config["commands"].get(command_name, {}).get("tap")
+            if coords:
+                kwargs.update({"x": coords[0], "y": coords[1]})
+
+        cmd(**kwargs)

@@ -1,5 +1,10 @@
 {
   "camera_package": "net.sourceforge.opencamera",
   "camera_activity": ".MainActivity",
-  "scrcpy_command": "scrcpy --max-size 1080 --video-bit-rate 8M --audio-bit-rate 128K --max-fps 30 --orientation=270 --crop 1080:1820:0:310"
+  "scrcpy_command": "scrcpy --max-size 1080 --video-bit-rate 8M --no-audio --max-fps 30 --orientation=270 --crop 1080:1820:0:310",
+  "commands": {
+    "close_all_apps": {
+      "tap": [537, 2096]
+    }
+  }
 }
