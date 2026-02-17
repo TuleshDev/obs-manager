@@ -183,27 +183,45 @@ def restart_app(serial: str, package: str):
 def get_setting(serial: str, namespace: str, key: str) -> str:
     return run_adb_command(serial, f"shell settings get {namespace} {key}")
 
-def set_setting(serial: str, namespace: str, key: str, value: str):
-    run_adb_command(serial, f"shell settings put {namespace} {key} {value}")
+def set_setting(serial: str, key: str, value: str, use_global: bool = False):
+    namespaces = ["secure", "system"]
+    if use_global:
+        namespaces.insert(0, "global")
+
+    commands = []
+    for ns in namespaces:
+        commands.append(f"shell settings put {ns} {key} {value}")
+        commands.append(
+            f"shell content insert --uri content://settings/{ns} "
+            f"--bind name:s:{key} --bind value:s:{value}"
+        )
+
+    last_error = None
+    for cmd in commands:
+        try:
+            return run_adb_command(serial, cmd)
+        except AdbError as e:
+            last_error = e
+    raise last_error
 
 def stay_awake(serial: str, enable: bool):
     value = "3" if enable else "0"
-    set_setting(serial, "global", "stay_on_while_plugged_in", value)
+    return set_setting(serial, "stay_on_while_plugged_in", value, use_global=True)
 
 def disable_battery_saver(serial: str):
-    run_adb_command(serial, "shell settings put global low_power 0")
+    return set_setting(serial, "low_power", "0", use_global=True)
 
 def enable_battery_saver(serial: str):
     run_adb_command(serial, "shell settings put global low_power 1")
 
 def set_brightness(serial: str, level: int):
-    set_setting(serial, "system", "screen_brightness", str(level))
+    return set_setting(serial, "screen_brightness", str(level), use_global=False)
 
 def get_brightness(serial: str) -> str:
     return get_setting(serial, "system", "screen_brightness")
 
 def set_volume(serial: str, level: int):
-    set_setting(serial, "system", "volume_music_speaker", str(level))
+    return set_setting(serial, "volume_music_speaker", str(level), use_global=False)
 
 def get_volume(serial: str) -> str:
     return get_setting(serial, "system", "volume_music_speaker")
@@ -251,11 +269,18 @@ def set_default_zoom(serial: str, coords_out: tuple, steps: int = 3):
     for _ in range(steps):
         zoom_out(serial, coords_out)
 
+def set_auto_rotation(serial: str, enable: bool):
+    value = "1" if enable else "0"
+    try:
+        return set_setting(serial, "accelerometer_rotation", value, use_global=False)
+    except AdbError:
+        return run_adb_command(serial, f"shell settings put system user_rotation {value}")
+
 def disable_auto_rotation(serial: str):
-    return run_adb_command(serial, "shell settings put system accelerometer_rotation 0")
+    return set_auto_rotation(serial, enable=False)
 
 def enable_auto_rotation(serial: str):
-    return run_adb_command(serial, "shell settings put system accelerometer_rotation 1")
+    return set_auto_rotation(serial, enable=True)
 
 def set_resolution(serial: str, coords: tuple):
     tap(serial, *coords)
