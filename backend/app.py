@@ -114,7 +114,6 @@ def reorder_config(data):
     for key in ["allow_delete_scenes", "cameras", "camera", "microphone", "camera_settings"]:
         if key in data:
             if key == "cameras" and isinstance(data[key], list):
-                data[key] = sorted(data[key], key=lambda x: x.get("name", ""))
                 data[key] = [sort_with_name_device(cam) for cam in data[key]]
             elif key == "camera" and isinstance(data[key], dict):
                 data[key] = sort_with_name_device(data[key])
