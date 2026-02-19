@@ -27,7 +27,7 @@
         <v-tabs-window-item value="config">
           <SettingsForm
             @updated="loadConfig"
-            @error="emitMessage($event, 'error')"
+            @error="showMessage($event, 'error')"
             @changed="formDirty = true"
             @saved="formDirty = false"
             :global-config="config.global"
@@ -58,6 +58,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { api } from '../api'
 import SettingsForm from '../components/SettingsForm.vue'
+import { useSnackbar } from '../composables/useSnackbar'
 import { useCurrentScenarioStore } from '../stores/currentScenario'
 
 import ActionsPanelMath from '../scenarios/Math/components/ActionsPanel.vue'
@@ -65,6 +66,7 @@ import ActionsPanelStreaming from '../scenarios/Streaming/components/ActionsPane
 
 const tab = ref('config')
 const scenarioStore = useCurrentScenarioStore()
+const { showMessage } = useSnackbar()
 
 const config = ref({ global: {}, scenario: {} })
 const cameras = ref([])
@@ -88,7 +90,7 @@ const loadConfig = async () => {
     const res = await api.getConfig(scenarioStore.name)
     config.value = res
   } catch (err) {
-    emitMessage("Ошибка: " + err.message, "error")
+    showMessage("Ошибка: " + err.message, "error")
   }
 }
 
@@ -98,7 +100,7 @@ const refreshDevices = async () => {
     cameras.value = res.cameras || []
     microphones.value = res.microphones || []
   } catch (err) {
-    emitMessage("Ошибка: " + err.message, "error")
+    showMessage("Ошибка: " + err.message, "error")
   }
 }
 
@@ -119,9 +121,9 @@ const exportTo = async ({ useTemplate }) => {
       use_template: useTemplate
     })
 
-    emitMessage("Успех: " + res.message, "success")
+    showMessage("Успех: " + res.message, "success")
   } catch (err) {
-    emitMessage("Ошибка: " + err.message, "error")
+    showMessage("Ошибка: " + err.message, "error")
   }
 }
 
@@ -133,28 +135,23 @@ const importFrom = async () => {
       scenario: config.value.scenario
     })
 
-    emitMessage("Успех: " + res.message, "success")
+    showMessage("Успех: " + res.message, "success")
   } catch (err) {
-    emitMessage("Ошибка: " + err.message, "error")
+    showMessage("Ошибка: " + err.message, "error")
   }
 }
 
 const downloadBackup = async () => {
   try {
     const res = await api.restoreBackup(scenarioStore.name)
-    emitMessage("Успех: " + res.message, "success")
+    showMessage("Успех: " + res.message, "success")
 
     const currentTab = tab.value
     await loadConfig()
     tab.value = currentTab
   } catch (err) {
-    emitMessage("Ошибка: " + err.message, "error")
+    showMessage("Ошибка: " + err.message, "error")
   }
-}
-
-const emit = defineEmits(['message'])
-function emitMessage(msg, type) {
-  emit('message', { msg, type })
 }
 
 onMounted(() => {

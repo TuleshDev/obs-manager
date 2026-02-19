@@ -30,8 +30,6 @@ const drawer = ref(true)
 const scenarioStore = useCurrentScenarioStore()
 const studentStore = useCurrentStudentStore()
 
-defineEmits(['message'])
-
 onMounted(() => {
   scenarioStore.loadFromStorage()
   studentStore.loadFromStorage()
