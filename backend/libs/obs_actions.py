@@ -123,14 +123,25 @@ class ObsActions:
                 f"Не удалось подключиться к OBS WebSocket после {retries} попыток: {last_error}"
             )
 
-    def clear_scenes(self):
+    def clear_scenes_and_filters(self):
         try:
             scenes = self.client.get_scene_list().scenes
             for scene in scenes:
-                self.client.remove_scene(scene["sceneName"])
+                scene_name = scene["sceneName"]
+
+                sources = self.client.get_scene_item_list(scene_name).scene_items
+                for src in sources:
+                    source_name = src["sourceName"]
+                    filters = self.client.get_source_filter_list(source_name).filters
+                    for f in filters:
+                        if f["filterKind"] == "crop_filter":
+                            self.client.remove_source_filter(source_name, f["filterName"])
+
+                self.client.remove_scene(scene_name)
+
         except Exception as e:
             traceback.print_exc()
-            raise RuntimeError(f"Ошибка при удалении сцен: {e}")
+            raise RuntimeError(f"Ошибка при удалении сцен и фильтров: {e}")
 
     def ensure_unique_scene_name(self, base_name="TempScene"):
         scenes = self.client.get_scene_list().scenes
