@@ -1,6 +1,7 @@
 import psutil
 import pygetwindow as gw
 import queue
+import re
 import subprocess
 import time
 import threading
@@ -88,6 +89,9 @@ class AndroidActions:
                     "--audio-bit-rate", "64K",
                     "--max-fps", "15"
                 ]
+
+            if device_serial:
+                args[1:1] = ["-s", device_serial]
 
             if not self.scrcpy_no_window:
                 args.append(f"--window-title={self.scrcpy_title}")
@@ -194,6 +198,8 @@ class AndroidActions:
                 if "--no-window" in self.scrcpy_command:
                     self.scrcpy_no_window = True
 
+        return self.scrcpy_command
+
     def wait_for_scrcpy_ready(self):
         self.get_scrcpy_command()
 
@@ -237,6 +243,45 @@ class AndroidActions:
         instance = AndroidActions(is_scrcpy, scrcpy_title, config_data, settings_data, phone_config)
         instance.start()
         return instance
+
+    @staticmethod
+    def scrcpy_canvas(crop_w, crop_h, orientation=0, max_size=None):
+        if orientation in (90, 270):
+            w, h = crop_h, crop_w
+        else:
+            w, h = crop_w, crop_h
+
+        if max_size:
+            if max(w, h) > max_size:
+                if w >= h:
+                    scale = max_size / w
+                else:
+                    scale = max_size / h
+                w = int(round(w * scale))
+                h = int(round(h * scale))
+
+        return w, h
+
+    @staticmethod
+    def parse_scrcpy_command(command: str):
+        crop_match = re.search(r"--crop\s+(\d+):(\d+):(\d+):(\d+)", command)
+        max_size_match = re.search(r"--max-size\s+(\d+)", command)
+        orientation_match = re.search(r"--orientation\s+(\d+)", command)
+
+        crop_w, crop_h = None, None
+        if crop_match:
+            crop_w = int(crop_match.group(1))
+            crop_h = int(crop_match.group(2))
+
+        max_size = int(max_size_match.group(1)) if max_size_match else None
+        orientation = int(orientation_match.group(1)) if orientation_match else 0
+
+        return {
+            "crop_width": crop_w,
+            "crop_height": crop_h,
+            "orientation": orientation,
+            "max_size": max_size
+        }
 
     COMMANDS = {
         "close_all_apps": adb_utils.close_all_apps

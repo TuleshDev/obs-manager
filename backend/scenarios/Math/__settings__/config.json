@@ -22,10 +22,6 @@
   },
   "camera_settings": [
     {
-      "base": {
-        "cam_height": 1080,
-        "cam_width": 1820
-      },
       "mobile": {
         "device_serial": "",
         "apps_to_close": [
@@ -52,9 +48,7 @@
     {
       "base": {
         "boundsHeight": 240,
-        "boundsWidth": 240,
-        "cam_height": 1080,
-        "cam_width": 1820
+        "boundsWidth": 240
       },
       "mobile": {
         "device_serial": "",

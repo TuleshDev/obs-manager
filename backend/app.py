@@ -57,43 +57,6 @@ def get_scenario_config(path, scenario_name):
 
     return cfg
 
-def update_mobile_camera_dimensions(scenario_name, cfg):
-    try:
-        camera_settings = cfg.get("camera_settings", [])
-        for cam in camera_settings:
-            mobile_data = cam.get("mobile", {})
-            if not mobile_data:
-                continue
-
-            phone_cfg = load_phone_config(scenario_name, mobile_data)
-            if not phone_cfg:
-                continue
-
-            scrcpy_cmd = phone_cfg.get("scrcpy_command", "")
-            if not scrcpy_cmd:
-                continue
-
-            match = re.search(r"--crop\s+(\d+):(\d+):(\d+):(\d+)", scrcpy_cmd)
-            if match:
-                w, h, x, y = map(int, match.groups())
-
-                orientation_match = re.search(r"--orientation=(\d+)", scrcpy_cmd)
-                if orientation_match:
-                    orientation = int(orientation_match.group(1))
-                else:
-                    orientation = 0
-
-                if orientation in (90, 270):
-                    w, h = h, w
-
-                base = cam.setdefault("base", {})
-                base["cam_width"] = w
-                base["cam_height"] = h
-
-    except Exception as e:
-        traceback.print_exc()
-        raise RuntimeError(f"Ошибка при обновлении параметров мобильных камер: {e}")
-
 def reorder_config(data):
 
     def sort_object(obj):
@@ -188,7 +151,6 @@ def write_scenario_config(path, scenario_name, cfg, backup_dir=None):
         with open(config_path_backup, "w", encoding="utf-8") as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
 
-        update_mobile_camera_dimensions(scenario_name, cfg)
         ordered_cfg = reorder_config(cfg)
 
         with open(config_path, "w", encoding="utf-8") as f:
@@ -589,42 +551,59 @@ def export_to_obs():
 
                             if scenario_name == "Math" and idx == 1:
                                 if transform.get("boundsWidth") == "${boundsWidth}" and transform.get("boundsHeight") == "${boundsHeight}":
-                                    settings_data_0 = camera_settings[0]
-                                    base_data_0 = settings_data_0.get("base", {})
-
-                                    cam_w_0 = base_data_0.get("cam_width", 1280)
-                                    cam_h_0 = base_data_0.get("cam_height", 720)
-
                                     settings_data = camera_settings[idx]
                                     base_data = settings_data.get("base", {})
 
-                                    inset_w = base_data.get("boundsWidth", 320)
-                                    inset_h = base_data.get("boundsHeight", 240)
+                                    cam = cameras[idx]
+                                    is_mobile = cam.get("is_mobile", False)
+                                    is_scrcpy = cam.get("is_scrcpy", False)
 
-                                    transform["boundsWidth"] = inset_w
-                                    transform["boundsHeight"] = inset_h
-                                    transform["positionX"] = base_w - inset_w
-                                    transform["positionY"] = base_h - inset_h
+                                    crop_left = base_data.get("cropLeft", 0)
+                                    crop_right = base_data.get("cropRight", 0)
+                                    crop_top = base_data.get("cropTop", 0)
+                                    crop_bottom = base_data.get("cropBottom", 0)
 
-                                    inset_ratio = inset_w / inset_h
-                                    cam_ratio_0 = cam_w_0 / cam_h_0
+                                    if not (is_mobile and not is_scrcpy) and \
+                                       (crop_left == 0 and crop_right == 0 and crop_top == 0 and crop_bottom == 0):
+                                        inset_w = base_data.get("boundsWidth", 320)
+                                        inset_h = base_data.get("boundsHeight", 240)
 
-                                    if inset_ratio < cam_ratio_0:
-                                        scale = cam_h_0 / inset_h
-                                        inset_w_scaled = int(inset_w * scale)
-                                        inset_h_scaled = cam_h_0
-                                        crop_left = (cam_w_0 - inset_w_scaled) // 2
-                                        crop_right = (cam_w_0 - inset_w_scaled) // 2
-                                        crop_top = crop_bottom = 0
-                                    elif inset_ratio > cam_ratio_0:
-                                        scale = cam_w_0 / inset_w
-                                        inset_w_scaled = cam_w_0
-                                        inset_h_scaled = int(inset_h * scale)
-                                        crop_top = (cam_h_0 - inset_h_scaled) // 2
-                                        crop_bottom = (cam_h_0 - inset_h_scaled) // 2
-                                        crop_left = crop_right = 0
-                                    else:
-                                        crop_left = crop_right = crop_top = crop_bottom = 0
+                                        if is_mobile and is_scrcpy:
+                                            settings_data = camera_settings[idx]
+                                            base_data = settings_data.get("base", {})
+
+                                            scrcpy_command = android_cameras[idx].get_scrcpy_command()
+                                            params = AndroidActions.parse_scrcpy_command(scrcpy_command)
+
+                                            cam_w, cam_h = AndroidActions.scrcpy_canvas(params["crop_width"], params["crop_height"],
+                                                params["orientation"], params["max_size"])
+                                        else:
+                                            cam_w, cam_h = 1280, 720
+
+                                        transform["boundsWidth"] = inset_w
+                                        transform["boundsHeight"] = inset_h
+                                        transform["positionX"] = base_w - inset_w
+                                        transform["positionY"] = base_h - inset_h
+
+                                        inset_ratio = inset_w / inset_h
+                                        cam_ratio = cam_w / cam_h
+
+                                        if inset_ratio < cam_ratio:
+                                            scale = cam_h / inset_h
+                                            inset_w_scaled = int(inset_w * scale)
+                                            inset_h_scaled = cam_h
+                                            crop_left = (cam_w - inset_w_scaled) // 2
+                                            crop_right = (cam_w - inset_w_scaled) // 2
+                                            crop_top = crop_bottom = 0
+                                        elif inset_ratio > cam_ratio:
+                                            scale = cam_w / inset_w
+                                            inset_w_scaled = cam_w
+                                            inset_h_scaled = int(inset_h * scale)
+                                            crop_top = (cam_h - inset_h_scaled) // 2
+                                            crop_bottom = (cam_h - inset_h_scaled) // 2
+                                            crop_left = crop_right = 0
+                                        else:
+                                            crop_left = crop_right = crop_top = crop_bottom = 0
 
                                     if not (crop_left == 0 and crop_right == 0 and crop_top == 0 and crop_bottom == 0):
                                         item["filters"].append({
