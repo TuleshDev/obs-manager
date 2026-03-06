@@ -5,36 +5,60 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { useSnackbar } from '../composables/useSnackbar'
+import { onMounted, ref, watch } from 'vue'
+import { useCameraLayoutStore } from '../stores/cameraLayout'
 
-const { showMessage } = useSnackbar()
+const store = useCameraLayoutStore()
 const video = ref(null)
+let stream = null
 
-onMounted(async () => {
+async function startCamera() {
   try {
-    // const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-	const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+    stream = await navigator.mediaDevices.getUserMedia({ video: true })
     video.value.srcObject = stream
-    showMessage("Успех: камера успешно запущена")
+    console.log("Камера запущена")
   } catch (err) {
     console.error("Ошибка доступа к камере:", err)
-    showMessage("Ошибка: доступ к камере невозможен", "error")
+  }
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop())
+    video.value.srcObject = null
+    stream = null
+    console.log("Камера остановлена")
+  }
+}
+
+onMounted(() => {
+  if (store.cameraActive) {
+    startCamera()
   }
 })
+
+watch(
+  () => store.cameraActive,
+  (active) => {
+    if (active) {
+      startCamera()
+    } else {
+      stopCamera()
+    }
+  }
+)
 </script>
 
 <style scoped>
 .camera-container {
-  width: 100vw;
-  height: 100vh;
-  background: black;
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
 }
 video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 </style>

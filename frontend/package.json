@@ -9,7 +9,9 @@
   "dependencies": {
     "axios": "^1.7.0",
     "lodash": "^4.17.21",
+    "monaco-editor": "^0.55.1",
     "pinia": "^3.0.4",
+    "vite-plugin-monaco-editor": "^1.1.0",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0",
     "vuetify": "^3.6.0"
